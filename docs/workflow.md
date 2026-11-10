@@ -22,7 +22,8 @@ follow.
 ## 2. Priority: what to work on first
 
 Score a problem as **severity x reach x confidence** and work from the top. Write the three parts in the issue or the
-claim, so others can see why it was picked.
+claim, so others can see why it was picked. The scored, sorted list of open work is **[docs/worklist.md](worklist.md)**:
+pick from its top, and add new problems there with their three parts.
 
 ### Severity
 
@@ -110,7 +111,8 @@ next thing to work on is the top of `is:open label:reproduced -label:claimed sor
 ## For agents
 
 - Start here, then AGENTS.md, then CONTRIBUTING.md.
-- Pick from the top of the priority order; prefer problems you can reproduce on the hardware you run on.
+- Pick from the top of [docs/worklist.md](worklist.md); add a scored row there for a new problem you find.
+- Prefer problems you can reproduce on the hardware you run on.
 - Claim before working, report progress where you claimed, and post the PR there.
 - Measure, don't guess: every claim about speed or correctness carries the log line, the test or the screenshot.
 - Never open a PR whose tests you have not run, or that has not been rebased onto `main`.
