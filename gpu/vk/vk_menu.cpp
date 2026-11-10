@@ -573,6 +573,7 @@ const char* tx_preset(int v) {
 // budgets are among them (preset_vram_budget), so a preset sets the row, and the row can also be chosen on its own (null and
 // Gummi, #dev-work 2026-11-10: the presets were the only way to set a limit)
 constexpr int kVramBudgets = 8;
+constexpr int kVramMinimumOnly = 1;   // (2.2 GB: set by the Minimum (4GB) preset only; the row's own steps go past it)
 constexpr int kVramTextureMb[kVramBudgets] = {0, 2200, 3600, 4800, 6144, 7500, 9216, 11000};
 constexpr int kVramMirrorMb[kVramBudgets] = {0, 256, 512, 1024, 1536, 2048, 2560, 3072};
 int preset_vram_budget(int p) {
@@ -585,7 +586,7 @@ void vram_budget_sync() {
     opts.mirror_mb = kVramMirrorMb[b];
 }
 const char* tx_vram_budget(int v) {
-    static const char* t[kVramBudgets] = {"Auto", "2.2 GB", "3.6 GB", "4.8 GB", "6 GB", "7.5 GB", "9 GB", "11 GB"};
+    static const char* t[kVramBudgets] = {"Auto", "2.2 GB (4GB preset)", "3.6 GB", "4.8 GB", "6 GB", "7.5 GB", "9 GB", "11 GB"};
     return t[std::min(std::max(v, 0), kVramBudgets - 1)];
 }
 MENU_HINTS(hn_vram_budget, 0, "Set from what the driver allows: 70% of it, 45% on cards of 8 GB or less, at most 6 GB.",
@@ -1447,6 +1448,10 @@ void set_row(Row& r, int v, int dir, bool keep = true) {
         v = step_output_choice(*r.value, dir);
         if (v == *r.value) return;
     }
+    // (hookshot) the VRAM budget row steps past 2.2 GB: the Minimum (4GB) preset's, too few textures on a bigger card (a 12 GB
+    // card's walk made 2-3 times as many textures again as at Auto, 1% lows of 5-7 fps; hckrman101, #dev-work). The preset still
+    // sets it, and the row shows it then
+    if (r.value == &opts.vram_budget && v == kVramMinimumOnly) v += dir;
     if (stops_at_ends(r)) v = std::min(std::max(v, r.lo), r.hi);   // (a scale: it stops at its ends)
     if (r.value == &opts.pad_layout) {
         if (v > 2) v = dir > 0 ? 0 : 2;

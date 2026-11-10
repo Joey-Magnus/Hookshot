@@ -56,6 +56,10 @@ def main():
     row = re.search(r'\{TAB_GRAPHICS, "VRAM budget", &opts\.vram_budget,.*?\},', menu, re.S)
     if not row or not row.group(0).rstrip("},").rstrip().endswith("hn_vram_budget, false, true"):
         fail.append("no VRAM budget row that leaves the preset alone (preset_exempt)")
+    if "if (r.value == &opts.vram_budget && v == kVramMinimumOnly) v += dir;" not in menu:
+        fail.append("the row's own steps do not go past 2.2 GB (the Minimum preset's only)")
+    if '"2.2 GB (4GB preset)"' not in menu:
+        fail.append("2.2 GB is not shown as the 4GB preset's")
     if "if (!has_vram_budget) opts.vram_budget = preset_vram_budget(opts.budget);" not in menu:
         fail.append("an options file from before the row does not take its preset's budgets")
 
