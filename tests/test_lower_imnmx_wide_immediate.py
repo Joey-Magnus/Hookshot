@@ -27,8 +27,8 @@ static Shader::Ampere::LoweredProgram lower(Instruction i) { return Shader::Ampe
 static constexpr uint64_t PT = 7ULL << 16;
 static uint64_t mov32i(uint32_t d, uint32_t value) { return 0x0100000000000000ULL | PT | d | (15ULL << 12) | (uint64_t{value} << 20); }
 // Maxwell IMNMX (register form) Rd = min/max(Ra, Rb) by the predicate in 39-42, .U32 unless bit 48
-static uint64_t imnmx_r(uint32_t d, uint32_t a, uint32_t b) {
-    return 0x5c20000000000000ULL | PT | d | (uint64_t{a} << 8) | (uint64_t{b} << 20) | (7ULL << 39);
+static uint64_t imnmx_r(uint32_t d, uint32_t a, uint32_t b, bool sign = false) {
+    return 0x5c20000000000000ULL | PT | d | (uint64_t{a} << 8) | (uint64_t{b} << 20) | (7ULL << 39) | (uint64_t{sign} << 48);
 }
 static uint64_t imnmx_i(uint32_t d, uint32_t a, uint32_t imm) {
     return 0x3820000000000000ULL | PT | d | (uint64_t{a} << 8) | (uint64_t{imm & 0x7ffff} << 20) |
@@ -51,6 +51,18 @@ int main() {
         CHECK(r && r.instructions[0] == imnmx_i(0x1a, 0x19, 0x0007ffff));
         const auto n = lower(insn(0x191a7817, 0xfffffff0, 0x03800000, 0x000fc400));
         CHECK(n && n.instructions[0] == imnmx_i(0x1a, 0x19, 0xfffffff0));
+    }
+    {   // the boundaries: 0x00080000 and 0xfff7ffff do not fit a signed 20-bit immediate, 0xfff80000 does
+        const auto up = lower(insn(0x191a7817, 0x00080000, 0x03800000, 0x000fc400));
+        CHECK(up && up.instructions[0] == mov32i(251, 0x00080000) && up.instructions[1] == imnmx_r(0x1a, 0x19, 251));
+        const auto down = lower(insn(0x191a7817, 0xfff7ffff, 0x03800000, 0x000fc400));
+        CHECK(down && down.instructions[0] == mov32i(251, 0xfff7ffff) && down.instructions[1] == imnmx_r(0x1a, 0x19, 251));
+        const auto fits = lower(insn(0x191a7817, 0xfff80000, 0x03800000, 0x000fc400));
+        CHECK(fits && fits.instructions[0] == imnmx_i(0x1a, 0x19, 0xfff80000));
+    }
+    {   // .S32 (word 2 bit 9, native bit 73): bit 48 in the register form too
+        const auto r = lower(insn(0x191a7817, 0x007f0004, 0x03800200, 0x000fc400));
+        CHECK(r && r.instructions[1] == imnmx_r(0x1a, 0x19, 251, true));
     }
     std::printf("PASS: IMNMX with a wide immediate lowers through R251\n");
 }
