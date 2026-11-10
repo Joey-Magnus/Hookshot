@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = r'''#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <algorithm>
 #include <string>
 #include <vector>
 #include "shader_recompiler/frontend/ampere/lower_to_maxwell.h"
@@ -40,12 +41,19 @@ int main() {
     {   // SULD.P.1D.R.IGN R0, [R1], the descriptor at 0x8 (the 17th)
         const auto r = lower(insn(0x01007b97, 0x00000800, 0x001e0100, 0x000f6200));
         CHECK(r);
-        CHECK(r.instructions[0] == suld(0, 1, 1, 0, 0x8));
+        CHECK(r.instructions.size() >= 1 && r.instructions[0] == suld(0, 1, 1, 0, 0x8));
     }
     {   // 2D (dimension code 3) as before
         const auto r = lower(insn(0x04027b97, 0x60001000, 0x001e0f00, 0x000f6200));
         CHECK(r);
-        CHECK(r.instructions[0] == suld(2, 4, 15, 3, 0x10));
+        CHECK(r.instructions.size() >= 1 && r.instructions[0] == suld(2, 4, 15, 3, 0x10));
+    }
+    {   // 1D takes one coordinate register: R254 is the last one allowed (an extended register: the program gets
+        // its register-map marker first, so the load is looked for), RZ (R255) is not
+        const auto r = lower(insn(0xfe007b97, 0x00001000, 0x001e0100, 0x000f6200));
+        CHECK(r);
+        CHECK(std::find(r.instructions.begin(), r.instructions.end(), suld(0, 254, 1, 0, 0x10)) != r.instructions.end());
+        CHECK(!lower(insn(0xff007b97, 0x00001000, 0x001e0100, 0x000f6200)));
     }
     // 1D_BUFFER and 1D_ARRAY (codes 1 and 2) are still refused
     CHECK(!lower(insn(0x00007b97, 0x20001000, 0x001e0100, 0x000f6200)));
