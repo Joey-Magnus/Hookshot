@@ -67,7 +67,9 @@ make_game = importlib.util.module_from_spec(mg_spec)
 mg_spec.loader.exec_module(make_game)
 calls = []
 sys.modules["nup"] = type(sys)("nup")
-sys.modules["nup"].stand_in_damaged = lambda romfs: calls.append(romfs) or []
+# (make_game passes a progress(done, total) since #1764: the builder's bar for the check)
+sys.modules["nup"].stand_in_damaged = lambda romfs, progress=None: calls.append(romfs) or progresses.append(progress) or []
+progresses = []
 with tempfile.TemporaryDirectory() as out:
     romfs = os.path.join(out, "romfs")
     os.makedirs(romfs)
@@ -78,6 +80,7 @@ with tempfile.TemporaryDirectory() as out:
     make_game.stand_in_damaged_files(out, romfs)
     make_game.stand_in_damaged_files(out, romfs)
     check("checked once", calls, [romfs])
+    check("with a progress callback", [callable(p) for p in progresses], [True])
     with open(os.path.join(out, ".hookshot_romfs"), "w") as f:
         f.write("unpacked by this builder: other.nup 2\n")
     make_game.stand_in_damaged_files(out, romfs)
