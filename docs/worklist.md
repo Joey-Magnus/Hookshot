@@ -25,7 +25,7 @@ Agents may add and re-score rows; a person reviews the change like any other PR.
 |---:|---|---|---:|---:|---|---|
 | 3.0 | Shader programs that still do not translate (TLD multisample bit 78, LDG descriptor without `.E`, programs using the lowering scratch registers, uniform-addressed global loads) | S2 | 1.0 | 1.0 | | `--prepare-shaders` log; Legion Go 2 log in #bug-reporting |
 | 2.1 | Camera turns in Kokiri Forest stutter: 46 fps minimum, dips to 38 (14700KF); goal is a 60 fps minimum | S2 | 1.0 | 0.7 | Joey-Magnus | Reddit report; #dev-work claim |
-| 2.0 | Antivirus / VirusTotal flags the Windows downloads; players ask for signed builds | S1 | 0.57 | 0.7 | Joey-Magnus | Reddit r/decomps; #dev-work claim |
+| 2.0 | Antivirus flags HookshotBuilder.exe (Defender `Wacatac.H!ml` / `Wacatac.B!ml`, Chrome on v2.0.12): new unsigned exe, no reputation. Waiting on the SignPath open-source signing application; then sign in `windows-builder.yml` and publish the signed files | S1 | 0.57 | 0.7 | NotRexed (SignPath) | #1003, #525, #1620; checksums: #1307 |
 | 1.2 | Link keeps playing a jump animation in dialogue after the Gohma fight (gameplay fine) | S2 | 1.0 | 0.4 | | #bug-reporting "My link is jumping forever" |
 | 1.2 | Ground in Kokiri Forest / Lost Woods looks smeared, without detail | S2 | 1.0 | 0.4 | | #bug-reporting "Ground design is not loading properly" (log asked for) |
 | 1.2 | Trees float above the ground (Kakariko, Hyrule Field): reported as already fixed, check which change and that it shipped | S2 | 1.0 | 0.4 | | tracker #994 |
