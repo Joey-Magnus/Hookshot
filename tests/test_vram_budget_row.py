@@ -1,0 +1,136 @@
+"""The VRAM budget is a menu row of its own: a preset sets it, and a budget chosen on it is the player's on any card.
+
+The texture and mirror budgets came from the Quality preset alone (#1358 keeps them when another row makes the preset
+Custom), with no way to choose a limit (Discord #dev-work, 2026-11-10). The VRAM budget row holds them now. This builds
+the menu's own functions from vk_menu.cpp and preset_caps_memory from vk_memory.cpp and checks: each preset gives the
+budgets it gave before, the row's values, and that a budget chosen on the row (opts.budget 0) applies on any card while a
+preset's own still applies only on the card it is for. Source checks: the row-change handler clears opts.budget and sets
+the budgets from the row, the row leaves the preset alone, and an options file from before the row takes its preset's.
+python -I -B tests/test_vram_budget_row.py [--cxx g++]
+"""
+import argparse
+import re
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+RUN_ALL_ARGS = ["--cxx", "g++"]
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def block(text, start):
+    """the definition starting at start, through its closing brace"""
+    i = text.index("{", start)
+    depth = 0
+    for j in range(i, len(text)):
+        depth += text[j] == "{"
+        depth -= text[j] == "}"
+        if depth == 0:
+            return text[start:j + 1]
+    raise SystemExit("no end of the definition at %d" % start)
+
+
+def definition(text, signature):
+    return block(text, text.index(signature))
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    p.add_argument("--cxx", default="g++")
+    a = p.parse_args()
+    menu = (ROOT / "gpu" / "vk" / "vk_menu.cpp").read_text(encoding="utf-8")
+    memory = (ROOT / "gpu" / "vk" / "vk_memory.cpp").read_text(encoding="utf-8")
+    header = (ROOT / "gpu" / "vk" / "vk_menu.h").read_text(encoding="utf-8")
+    fail = []
+
+    # (source checks)
+    handler = menu[menu.index("} else if (r.value == &opts.preset) {"):]
+    handler = handler[:handler.index("if (r.value == &opts.mic")]
+    if "sync_preset_budgets(0)" in handler:
+        fail.append("changing a row (Custom) still resets the budgets")
+    vb = handler[handler.index("if (r.value == &opts.vram_budget) {"):] if "if (r.value == &opts.vram_budget) {" in handler else ""
+    if "opts.budget = 0;" not in vb[:200] or "vram_budget_sync();" not in vb[:200]:
+        fail.append("changing the VRAM budget row does not make it the player's (opts.budget 0) and set the budgets")
+    row = re.search(r'\{TAB_GRAPHICS, "VRAM budget", &opts\.vram_budget,.*?\},', menu, re.S)
+    if not row or not row.group(0).rstrip("},").rstrip().endswith("hn_vram_budget, false, true"):
+        fail.append("no VRAM budget row that leaves the preset alone (preset_exempt)")
+    if "if (!has_vram_budget) opts.vram_budget = preset_vram_budget(opts.budget);" not in menu:
+        fail.append("an options file from before the row does not take its preset's budgets")
+
+    options = re.search(r"struct Options \{.*?\n\};", header, re.S).group(0)
+    tables = menu[menu.index("constexpr int kVramBudgets"):menu.index("int preset_vram_budget")]
+    fixture = r'''#include <algorithm>
+#include <cstdint>
+#include <cstdio>
+#define CHECK(x) do { if (!(x)) { std::fprintf(stderr, "FAIL %d: %s\n", __LINE__, #x); return 1; } } while (0)
+OPTIONS
+Options opts;
+TABLES
+OF_PRESET
+SYNC
+SYNC_PRESET
+static uint64_t card_bytes = 16ull << 30;
+uint64_t device_vram_bytes() { return card_bytes; }
+CAPS
+int main() {
+    // (each preset's budgets as before the row: 2200/256, 3600/512, 4800/1024, 7500/2048, 11000/3072)
+    const int texture[] = {0, 2200, 3600, 4800, 7500, 11000}, mirror[] = {0, 256, 512, 1024, 2048, 3072};
+    for (int p = 1; p <= 5; p++) {
+        opts.preset = opts.budget = p;
+        sync_preset_budgets(p);
+        CHECK(opts.vram_mb == texture[p] && opts.mirror_mb == mirror[p]);
+    }
+    opts.budget = 0;
+    sync_preset_budgets(0);   // (Custom chosen on the preset row: Auto, as before)
+    CHECK(opts.vram_budget == 0 && opts.vram_mb == 0 && opts.mirror_mb == 0);
+    // (the row on its own: 4.8 GB)
+    opts.vram_budget = 3;
+    vram_budget_sync();
+    CHECK(opts.vram_mb == 4800 && opts.mirror_mb == 1024);
+    // (a preset's own budget applies only on a card it is for; one chosen on the row, opts.budget 0, on any card)
+    card_bytes = 16ull << 30;
+    opts.preset = opts.budget = 4;
+    sync_preset_budgets(4);
+    CHECK(!preset_caps_memory());   // (High's 7.5 GB on a 16 GB card: the card's own, as before)
+    opts.budget = 0;                // (the row set by the player: the handler)
+    opts.vram_budget = 3;
+    vram_budget_sync();
+    CHECK(preset_caps_memory());    // (4.8 GB chosen with High on: it applies)
+    card_bytes = 12ull << 30;
+    opts.budget = 4;
+    sync_preset_budgets(4);
+    CHECK(preset_caps_memory());    // (High on a 12 GB card: its own, as before)
+    std::printf("PASS: the VRAM budget row sets the budgets, the presets give theirs as before\n");
+    return 0;
+}
+'''
+    for key, value in (("OPTIONS", options), ("TABLES", tables),
+                       ("OF_PRESET", definition(menu, "int preset_vram_budget(int p)") +
+                        "\nint vram_budget_of_preset(int p) { return preset_vram_budget(p); }"),
+                       ("SYNC_PRESET", definition(menu, "void sync_preset_budgets(int p)")),
+                       ("SYNC", definition(menu, "void vram_budget_sync()")),
+                       ("CAPS", definition(memory, "bool preset_caps_memory()"))):
+        fixture = fixture.replace(key, value, 1)
+    with tempfile.TemporaryDirectory(prefix="vram-budget-row-") as tmp:
+        cpp = Path(tmp) / "fixture.cpp"
+        exe = Path(tmp) / "fixture"
+        cpp.write_text(fixture, encoding="utf-8")
+        built = subprocess.run([a.cxx, "-std=c++20", "-Wall", "-Wextra", "-Werror", str(cpp), "-o", str(exe)],
+                               capture_output=True, text=True)
+        if built.returncode:
+            fail.append("the fixture does not build:\n" + built.stderr[-1500:])
+        else:
+            run = subprocess.run([str(exe)], capture_output=True, text=True)
+            if run.returncode:
+                fail.append(run.stderr.strip() or "the fixture failed")
+            else:
+                print(run.stdout.strip())
+    if fail:
+        print("FAIL: " + "\n".join(fail))
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
