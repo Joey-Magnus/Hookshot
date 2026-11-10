@@ -306,6 +306,12 @@ static DWORD WINAPI display_main(void *p) {
         SetWindowPos(hwnd, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
     else
         ShowWindow(hwnd, SW_SHOW);
+    /* (hookshot) the display stays on while the game runs, as SDL keeps it on Linux ("Playing a game"): Windows counts no
+       controller input as activity, so with a pad it turned the screen off at the power timeout mid-game (issue 1532; the
+       SC_SCREENSAVE answer above stops the screen saver, not the display's power-off). This thread lives as long as the
+       window, so the request does too; HOS_ALLOW_DISPLAY_SLEEP=1 leaves Windows' timeouts as they are */
+    if (!getenv("HOS_ALLOW_DISPLAY_SLEEP") || !atoi(getenv("HOS_ALLOW_DISPLAY_SLEEP")))
+        SetThreadExecutionState(ES_CONTINUOUS | ES_DISPLAY_REQUIRED | ES_SYSTEM_REQUIRED);
     if (getenv("HOS_FULLSCREEN") && atoi(getenv("HOS_FULLSCREEN"))) set_fullscreen(hwnd, 1);
     RAWINPUTDEVICE rid = {1, 2, 0, hwnd};   /* generic desktop mouse: WM_INPUT while the window is in front */
     RegisterRawInputDevices(&rid, 1, sizeof rid);
