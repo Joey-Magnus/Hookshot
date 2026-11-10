@@ -32,6 +32,8 @@ Agents may add and re-score rows; a person reviews the change like any other PR.
 | 0.6 | Zora's Domain textures missing in the adult timeline (points to VRAM pressure, not the dump) | S2 | 0.3 | 0.7 | | #bug-reporting "Zora Domain textures missing?" |
 | 0.5 | Sacred Forest Meadow fairy fountain grotto: floor and walls invisible (RTX 2070 Super) | S2 | 0.4 | 0.4 | | #bug-reporting thread |
 | 0.4 | Voices in the wrong language | S3 | 1.0 | 0.4 | | #1460 (needs a save past Gohma) |
+| 0.24 | Handheld with no keyboard (Asus ROG Xbox Ally X, controller only): fullscreen and the F1 options menu cannot be reached; no log yet | S1 | 0.12 | 0.4 | | #bug-reporting "Xinput devices cannot enter fullscreen or menu" |
+| 0.11 | Intel GPU: black screen after loading a save (or on the Deku Tree), sound only, very low fps; three reports, no logs yet; tracked in the GitHub issue linked in #bug-reporting replies (#999) | S0 | 0.035 | 0.4 | | #bug-reporting "Intel G3E. Title and intro loads...", "intel arc b580 problems", "game gets stuck on a black screen when loading a save (intel gpu... gulp...)" |
 
 ## Fixed, waiting for a release
 
