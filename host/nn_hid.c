@@ -877,7 +877,13 @@ volatile int64_t hos_hid_last_read;
 /* GetNpadStates(State* out, int count, unsigned int const& npadId): the latest state first */
 static void npad_states(Ctx *c) {
     uint64_t out = ARG(0);
-    int count = (int)ARG(1);
+    /* (hookshot) at most the 16 states a console keeps, all in guest memory: a count from the game's arguments wrote
+       0x28 bytes a state past any buffer, and past the guest window */
+    int count = (int)ARG(1) < 0 ? 0 : (int)ARG(1) > 16 ? 16 : (int)ARG(1);
+    if (!hos_guest_range(out, (uint64_t)count * STATE_SIZE) || !hos_guest_range(ARG(2), 4)) {
+        RET(0);
+        return;
+    }
     uint32_t id = G32(ARG(2));
     uint64_t buttons = 0;
     int32_t stick[4] = {0};
@@ -988,7 +994,8 @@ HLE(_ZN2nn3hid22GetSixAxisSensorStatesEPNS0_18SixAxisSensorStateEiRKNS0_19SixAxi
     static int64_t six_sampling, six_base;
     static int was_live;
     const uint64_t out = ARG(0);
-    const int count = (int)ARG(1) < 1 ? 0 : (int)ARG(1) > HOS_MOTION_HISTORY ? HOS_MOTION_HISTORY : (int)ARG(1);
+    int count = (int)ARG(1) < 1 ? 0 : (int)ARG(1) > HOS_MOTION_HISTORY ? HOS_MOTION_HISTORY : (int)ARG(1);
+    if (!hos_guest_range(out, (uint64_t)count * 0x60)) count = 0;   /* (hookshot: the states in guest memory, or none) */
     static const float at_rest[18] = {0, 0, -1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1};
     int hos_sdl_motion_history(HosMotionSample *out, int max);   /* pad_sdl.c */
     HosMotionSample h[HOS_MOTION_HISTORY];

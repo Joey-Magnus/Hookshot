@@ -35,6 +35,7 @@ volatile int64_t hos_hid_last_read;
 volatile int hos_nvn_sync_log_on;
 static void *at(uint64_t address) { CHECK(address <= 512 - 8); return memory + address; }
 #define GP(a) at(a)
+static void *hos_guest_range(uint64_t a, uint64_t n) { return a <= 512 && n <= 512 - a ? memory + a : NULL; }
 #define G32(a) (*(uint32_t *)at(a))
 #define G64(a) (*(uint64_t *)at(a))
 #define ARG(n) (c->x[n])
