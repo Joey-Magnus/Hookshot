@@ -7,12 +7,21 @@ import os
 import subprocess
 import threading
 import time
+import urllib.error
 import urllib.request
 
 from . import REPO, paths, setup_parts
 from .core import Tools
 
 LATEST = "https://api.github.com/repos/%s/releases/latest" % REPO
+
+
+def read_small_body(r):
+    """An API answer or a setup list: setup_parts.MAX_BODY at most (a longer one is refused, not read whole)"""
+    data = r.read(setup_parts.MAX_BODY + 1)
+    if len(data) > setup_parts.MAX_BODY:
+        raise ValueError("the answer is larger than expected")
+    return data
 
 
 def latest_tag():
@@ -23,12 +32,13 @@ def latest_tag():
     for attempt in range(3):
         try:
             req = urllib.request.Request(LATEST, headers={"User-Agent": "HookshotBuilder", "Accept": "application/vnd.github+json"})
-            with urllib.request.urlopen(req, timeout=8) as r:
-                return json.loads(r.read()).get("tag_name")
+            with setup_parts.OPENER.open(req, timeout=8) as r:
+                tag = json.loads(read_small_body(r)).get("tag_name")
+                return tag if isinstance(tag, str) and setup_parts.list_name_ok(tag) else None
         except urllib.error.HTTPError as e:
             if e.code < 500:   # (the API's limit, 60 an hour a PC: the list below instead)
                 break
-        except (OSError, ValueError):
+        except (OSError, ValueError, setup_parts.SetupError):
             pass
         time.sleep(2 << attempt)
     # (v2.0.0: when the API did not answer, the builder said a game was up to date. The release's setup list names its tag in its
@@ -36,11 +46,12 @@ def latest_tag():
     for _ in range(2):
         try:
             req = urllib.request.Request(setup_parts.manifest_url(), headers={"User-Agent": "HookshotBuilder"})
-            with urllib.request.urlopen(req, timeout=8) as r:
-                for line in r.read().decode("utf-8", "replace").splitlines():
+            with setup_parts.OPENER.open(req, timeout=8) as r:
+                for line in read_small_body(r).decode("utf-8", "replace").splitlines():
                     if line.startswith("tag "):
-                        return line[4:].strip()
-        except OSError:
+                        tag = line[4:].strip()
+                        return tag if setup_parts.list_name_ok(tag) else None
+        except (OSError, ValueError, setup_parts.SetupError):
             pass
         time.sleep(2)
     return None
