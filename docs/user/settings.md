@@ -77,6 +77,8 @@ keeps the Docked profile, and Minimum starts with the scaling filter and sharpne
 
 ## Graphics
 
+![The Graphics tab of the settings menu](../images/user/menu-graphics.png)
+
 For more on the Upscaler, Render resolution and Frame generation, and how to pick between them, see
 [upscaling](upscaling.md).
 
@@ -195,6 +197,8 @@ These two rows sit above the button grid on the Controls page.
 | Button prompts | Auto, Switch, Xbox, PlayStation 4, PlayStation 5, Steam Deck | Auto | The button icons the game shows in its text and menus. **Auto** follows your first controller, and shows Switch icons when it can't tell. Applies after a restart |
 
 ## Debug
+
+![The Debug tab of the settings menu](../images/user/menu-debug.png)
 
 The debug tools are testing aids: they let you fly, move the camera freely, jump between places, switch Link's age,
 edit the inventory and set the clock. They're off by default. Turn on **Debug tools** to show them; turning it off
