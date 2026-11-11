@@ -1,7 +1,8 @@
 # What a Windows player downloads, made without game data: HookshotBuilder-Setup.exe (builder/setup/setup.c, with
 # llvm-mingw) and the Hookshot Builder package (dotnet publish, versioned from the tag as docs/versioning.md says), split
 # into the parts the setup downloads by scripts/make_setup_parts.py. The Python, emsdk, CPM and wgpu-native parts, and the
-# third_party part's prebuilt files, are the latest release's (scripts/release_parts.py). The Windows Vulkan back end is
+# third_party part's prebuilt files, are the latest release's (scripts/release_parts.py); the CPM part gets dav1d added
+# (the dav1d job) when that release's lacks it. The Windows Vulkan back end is
 # compiled too, with the same llvm-mingw: players build it on their PC, this only checks that it still builds.
 # A workflow artifact on every run; for a release, the new parts go to the builder-parts release and the setup
 # (HookshotBuilder.exe) and its list (hookshot-setup.txt) to the release, beside the Linux AppImage. A release is a tag
@@ -50,6 +51,7 @@ jobs:
     # (builder-parts holds the installer's parts: no package there. nightly is moved by the release job of a push to main,
     # and rc by the Release workflow)
     if: github.ref_name != 'builder-parts' && github.ref_name != 'nightly' && github.ref_name != 'rc'
+    needs: [dav1d]
     runs-on: windows-2022
     timeout-minutes: 30
     # (id-token and attestations: a release's build provenance)
@@ -142,11 +144,16 @@ jobs:
           -p:Version="$VERSION" -p:NuGetAudit=false --output "$RUNNER_TEMP/publish"
 
       # (it stops when assets/pipeline_states/, the sources of the pipeline state list every release ships, hold none or one does not read)
+      # (dav1d for the AV1 movies, from the dav1d job: added to the CPM part when the latest release's lacks it)
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dav1d-windows
+          path: ${{ runner.temp }}/dav1d-cpm
       - name: Package folder
         run: >-
           python -I scripts/release_parts.py package "$RUNNER_TEMP/package"
           --publish "$RUNNER_TEMP/publish" --setup "$RUNNER_TEMP/HookshotBuilder-Setup.exe"
-          ${PREVIOUS:+--list "$PREVIOUS" --python-packages nx2/prompt_requirements.txt}
+          ${PREVIOUS:+--list "$PREVIOUS" --python-packages nx2/prompt_requirements.txt --cpm-add "$RUNNER_TEMP/dav1d-cpm"}
 
       - name: Setup parts
         run: |
@@ -288,9 +295,10 @@ jobs:
           if-no-files-found: error
 
   # dav1d for the AV1 movies (issue 2316: the CPM cache's FFmpeg has none), made as scripts/windows/dav1d.sh makes it, with
-  # the same llvm-mingw release on Linux, and checked under Wine by the test of host/dav1d_av1.c. The artifact is the CPM
-  # folder for the builder's cpm part (tools/cpm/dav1d/<version>); the build prints the library's SHA-256, the same on
-  # every run with the same pins.
+  # the same llvm-mingw release on Linux, and checked under Wine by the test of host/dav1d_av1.c. The artifact is a CPM
+  # folder (dav1d/<version>): the package job adds it to the CPM part when the latest release's lacks it, and the new
+  # part goes to builder-parts with the others. The build prints the library's SHA-256, the same on every run with the
+  # same pins, so the part made from it is too.
   dav1d:
     name: dav1d for Windows (llvm-mingw)
     if: github.ref_name != 'builder-parts' && github.ref_name != 'nightly' && github.ref_name != 'rc'
