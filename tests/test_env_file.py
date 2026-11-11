@@ -116,6 +116,40 @@ def check_hookshot_names(cc, main_c, tmp):
     print("PASS: of %d HOOKSHOT_ names, a shared hookshot_env.txt takes only the game's own %d" % (len(names), len(taken)))
 
 
+def check_full_list(cc, fn, tmp):
+    """(a file with more names than the list of what it set holds: a name past its end is not set, so the builder an
+    update starts is never handed one the game could not take back)"""
+    game = tmp / "full"
+    game.mkdir()
+    last = "RX_LAST" + "Y" * 100
+    lines = ["RX_%s=1" % ("J%03d" % i).ljust(100, "X") for i in range(60)] + [last + "=1"]
+    (game / "hookshot_env.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    exe = str(game / "hookshot").replace("\\", "\\\\")
+    src = tmp / "full.c"
+    src.write_text(r'''#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#define MAX_PATH 260
+typedef unsigned long DWORD;
+static DWORD hos_game_path_a(char *out, DWORD size) { snprintf(out, size, "%s", "''' + exe + r'''"); return (DWORD)strlen(out); }
+''' + fn + r'''
+int main(void) {
+    load_hookshot_env();
+    int listed = 0;
+    for (const char *n = hos_env_file_names(); *n; n += strlen(n) + 1) listed |= !strcmp(n, "''' + last + r'''");
+    const int ok = listed == (getenv("''' + last + r'''") != NULL);
+    puts(ok ? "PASS: every switch the file set is on the list the builder's start takes back" : "FAIL: RX_LAST set, not listed");
+    return !ok;
+}
+''', encoding="utf-8")
+    subprocess.run([cc, "-std=c11", "-D_POSIX_C_SOURCE=200809L", "-Wall", "-Werror", "-Wno-unused-function", str(src),
+                    "-o", str(tmp / "full_list")], check=True)
+    r = subprocess.run([str(tmp / "full_list")], capture_output=True, text=True)
+    print(r.stdout, end="")
+    if r.returncode:
+        raise SystemExit("hookshot_env.txt: a switch was set but not listed for the builder's start")
+
+
 def check_dlss_dir(cc, main_c, tmp):
     src = tmp / "dlss_dir.c"
     src.write_text("#include <stdio.h>\n#include <string.h>\n" + block(main_c, "static int env_line_allowed(") +
@@ -142,13 +176,17 @@ def main():
     p.add_argument("--cc", default="gcc")
     a = p.parse_args()
     main_c = (ROOT / "host" / "hos_main.c").read_text(encoding="utf-8")
-    fn = block(main_c, "static int env_line_allowed(") + "\n" + block(main_c, "static void load_hookshot_env(void) {")
+    notes = main_c[main_c.index("static char env_file_names["):main_c.index("static void load_hookshot_env(void) {")]
+    fn = (block(main_c, "static int env_line_allowed(") + "\n" + notes + "\n" +
+          block(main_c, "static void load_hookshot_env(void) {"))
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         check_path_valued(a.cc, main_c, tmp)
         check_dlss_dir(a.cc, main_c, tmp)
         check_hookshot_names(a.cc, main_c, tmp)
+        if os.name != "nt":
+            check_full_list(a.cc, fn, tmp)
         game = tmp / "game"
         game.mkdir()
         # (the player's file sets the game's switches only: not the system's variables, HOS_ENV_FILE or paths)
@@ -210,6 +248,12 @@ int main(int argc, char **argv) {
     CHECK(is("SDL_VIDEO_DUMMY_SAVE_FRAMES", NULL) && is("SDL_VIDEO_OFFSCREEN_SAVE_FRAMES", NULL) && is("SDL_AUDIO_DRIVER", NULL));
     CHECK(is("SDL_VIDEODRIVER", "x11") && is("RX_VK_FRAME_TRACE", NULL));
     CHECK(is("RX_VK_DUMP_DIR", NULL) && is("HOS_PRESENT_TRACE", NULL));
+    /* (hookshot) the names it set, for the builder an update starts (host/hos_update.c): those taken, none left out */
+    int listed_beside = 0, listed_skip = 0, listed_refused = 0;
+    for (const char *n = hos_env_file_names(); *n; n += strlen(n) + 1)
+        listed_beside |= !strcmp(n, "HOS_T_BESIDE"), listed_skip |= !strcmp(n, "RX_VK_SKIP_CODE"),
+        listed_refused |= !strcmp(n, "LD_PRELOAD") || !strcmp(n, "RX_VK_SHOTS");
+    CHECK(listed_beside && listed_skip && !listed_refused);
     CHECK(getenv("LD_PRELOAD") == NULL || strcmp(getenv("LD_PRELOAD"), "/x.so"));
     CHECK(getenv("PATH") == NULL || strcmp(getenv("PATH"), "C:\\x"));
 
@@ -222,6 +266,7 @@ int main(int argc, char **argv) {
     setenv("HOS_ENV_FILE", argv[1], 1);            /* a test run's own file, and only that one */
     load_hookshot_env();
     CHECK(is("HOS_T_OTHER", "1") && is("HOS_T_SHARED", "other") && is("HOS_T_BESIDE", NULL) && is("VK_T_LAYER", "/y"));
+    for (const char *n = hos_env_file_names(); *n; n += strlen(n) + 1) CHECK(strcmp(n, "HOS_T_OTHER"));   /* (a test run's own: kept) */
 
     clear();
     setenv("HOS_ENV_FILE", argv[2], 1);            /* a file that is not there: nothing, not the player's switches */

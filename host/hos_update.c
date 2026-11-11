@@ -144,6 +144,18 @@ static int tag_in(const char *body, char *tag, size_t cap) {
     return 0;
 }
 
+/* (hookshot) whether an environment entry (NAME=VALUE) is one the game's shared hookshot_env.txt set: names is
+   hos_env_file_names' list (each name and a 0, an empty name at the end). The builder an update starts is not given
+   those: they are the game's switches, from a file someone may have handed the player, and the builder reads some of the
+   same names (RX_MARCH, RX_HOT_OPT, RX_VK_ONLY...) for the build it makes */
+__attribute__((unused)) static int set_by_env_file(const char *entry, const char *names) {   /* (Windows: not called) */
+    for (const char *n = names; n && *n; n += strlen(n) + 1) {
+        const size_t k = strlen(n);
+        if (!strncmp(entry, n, k) && entry[k] == '=') return 1;
+    }
+    return 0;
+}
+
 /* the newest vX.Y.Z[-rc.N] among the "tag_name"s of GitHub's release list (drafts are not shown without a token) */
 static int newest_tag(const char *body, char *tag, size_t cap) {
     int found = 0;
@@ -161,6 +173,7 @@ static int newest_tag(const char *body, char *tag, size_t cap) {
 #include "hos_paths.h"
 #include <windows.h>
 #include <winhttp.h>
+const char *hos_env_file_names(void);   /* (host/hos_main.c: what hookshot_env.txt set) */
 #include <shellapi.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -326,6 +339,20 @@ void hos_update_check(void) {
     wdir[MAX_PATH - 1] = 0;
     wchar_t *slash = wcsrchr(wdir, L'\\');
     if (slash) *slash = 0;
+    /* (hookshot) the builder gets the game's environment without what hookshot_env.txt set (set_by_env_file); put back
+       if it does not start, as the game then plays on */
+    const char *names = hos_env_file_names();
+    size_t room = 1;
+    for (const char *nm = names; nm && *nm; nm += strlen(nm) + 1) room += strlen(nm) + 2 + (getenv(nm) ? strlen(getenv(nm)) : 0);
+    char *kept = (char *)malloc(room);
+    size_t used = 0;
+    for (const char *nm = names; kept && nm && *nm; nm += strlen(nm) + 1) {
+        const char *v = getenv(nm);
+        if (!v) continue;
+        used += (size_t)sprintf(kept + used, "%s=%s", nm, v) + 1;   /* (room counted above) */
+        char gone[520];
+        if (snprintf(gone, sizeof gone, "%s=", nm) < (int)sizeof gone) _putenv(gone);
+    }
     if ((INT_PTR)ShellExecuteW(NULL, L"open", wbuilder, args, slash ? wdir : NULL, SW_SHOWNORMAL) > 32) {
         void hos_log_flush(void);
         hos_log_flush();   /* (the lines logged before, queued: host/hos_thread.c log_queue) */
@@ -333,12 +360,15 @@ void hos_update_check(void) {
         fflush(stderr);
         ExitProcess(0);
     }
+    for (size_t at = 0; kept && at < used; at += strlen(kept + at) + 1) _putenv(kept + at);
+    free(kept);   /* (_putenv copies) */
     MessageBoxW(NULL, L"Hookshot Builder could not be started. The game starts as it is.", L"Hookshot update", MB_OK | MB_ICONWARNING | MB_TOPMOST);
 }
 #elif defined(__linux__)
 #include "hos_paths.h"
 #include <ctype.h>
 #include <fcntl.h>
+const char *hos_env_file_names(void);   /* (host/hos_main.c: what hookshot_env.txt set) */
 #include <sys/stat.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -497,11 +527,25 @@ void hos_update_check(void) {
         }
         return;
     }
+    /* (hookshot) the builder gets the game's environment without what hookshot_env.txt set (set_by_env_file), made here:
+       the child only calls execve */
+    extern char **environ;
+    const char *names = hos_env_file_names();
+    size_t count = 0;
+    while (environ[count]) count++;
+    char **env = malloc((count + 1) * sizeof *env);
+    if (!env) return;
+    size_t kept = 0;
+    for (size_t i = 0; i < count; i++)
+        if (!set_by_env_file(environ[i], names)) env[kept++] = environ[i];
+    env[kept] = NULL;
+    char *const args[] = {builder, "--update", dir, "--tag", tag, NULL};
     pid_t pid = fork();
     if (pid == 0) {
-        execl(builder, builder, "--update", dir, "--tag", tag, (char *)0);
+        execve(builder, args, env);
         _exit(127);
     }
+    free(env);
     if (pid > 0) {
         fprintf(stderr, "update: Hookshot Builder started to update to %s; the game closes\n", tag);
         fflush(stderr);

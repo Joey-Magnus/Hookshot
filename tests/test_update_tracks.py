@@ -48,6 +48,12 @@ int main(int argc, char **argv) {
         fclose(f);
         return printf("%s\n", newest_tag(body, tag, sizeof tag) ? tag : "-"), 0;
     }
+    if (argc == 4 && argv[1][0] == 'e') {   /* e <NAME=VALUE> <names, comma-separated>: set by hookshot_env.txt? */
+        static char names[256];
+        snprintf(names, sizeof names - 1, "%s", argv[3]);
+        for (char *c = names; *c; c++) if (*c == ',') *c = 0;
+        return printf("%d\n", set_by_env_file(argv[2], names)), 0;
+    }
     if (argc == 5 && argv[1][0] == 'b')   /* b <exe> <args or -> <w|l> */
         return printf("%d\n", builder_ok(argv[2], strcmp(argv[3], "-") ? argv[3] : NULL, argv[4][0] == 'w')), 0;
     return 2;
@@ -122,6 +128,22 @@ class Tracks(unittest.TestCase):
 
     def c(self, *args):
         return subprocess.run([self.exe, *args], capture_output=True, text=True, check=True).stdout.split()
+
+    def test_the_builder_is_started_without_what_the_env_file_set(self):
+        # (hookshot_env.txt's names, as host/hos_main.c hos_env_file_names lists them: the builder an update starts
+        # inherits the game's environment, and reads some of the same names for its build)
+        names = "RX_MARCH,HOS_T,RX_VK_ONLY"
+        for entry, want in (("RX_MARCH=native", "1"), ("HOS_T=", "1"), ("RX_VK_ONLY=1", "1"), ("PATH=/usr/bin", "0"),
+                            ("RX_MARCHX=1", "0"), ("RX_MARC=1", "0"), ("HOS_TX=1", "0"), ("HOME=/home/ana", "0")):
+            self.assertEqual(self.c("e", entry, names), [want], entry)
+        self.assertEqual(self.c("e", "RX_MARCH=native", ""), ["0"])
+        source = (ROOT / "host/hos_update.c").read_text(encoding="utf-8")
+        linux = source[source.index("#elif defined(__linux__)"):]
+        self.assertIn("if (!set_by_env_file(environ[i], names)) env[kept++] = environ[i];", linux)
+        self.assertIn("execve(builder, args, env);", linux)
+        self.assertNotIn("execl(builder", linux)
+        windows = source[source.index("void hos_update_check(void) {"):source.index("#elif defined(__linux__)")]
+        self.assertLess(windows.index("_putenv(gone);"), windows.index("ShellExecuteW(NULL, L\"open\", wbuilder"))
 
     def test_the_track_of_a_version(self):
         for version, track in TRACKS + [("nightly", "release"), ("dev", "release")]:

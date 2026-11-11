@@ -449,6 +449,17 @@ static int env_line_allowed(const char *name, const char *value) {
     const int drive = ((value[0] | 0x20) >= 'a' && (value[0] | 0x20) <= 'z' && value[1] == ':');
     return !strpbrk(value, "/\\") && !drive && value[0] != '~' && strcmp(value, ".") && strcmp(value, "..");
 }
+/* (hookshot) the names the shared hookshot_env.txt set (not a HOS_ENV_FILE's), each with a 0 after it and an empty name
+   at the end: host/hos_update.c starts the builder without them */
+static char env_file_names[4096];
+static size_t env_file_used;
+const char *hos_env_file_names(void) { return env_file_names; }
+static int env_file_note(const char *name) {   /* (0: no room left, and the line is not taken) */
+    const size_t k = strlen(name) + 1;
+    if (env_file_used + k >= sizeof env_file_names) return 0;
+    memcpy(env_file_names + env_file_used, name, k), env_file_used += k;
+    return 1;
+}
 static void load_hookshot_env(void) {
     char path[MAX_PATH + 32];
     const char *other = getenv("HOS_ENV_FILE");
@@ -473,6 +484,10 @@ static void load_hookshot_env(void) {
         *eq = 0;
         if (!(other && *other) && !env_line_allowed(s, eq + 1)) {
             fprintf(stderr, "env: hookshot_env.txt: %s left out (only the game's switches, and no paths, are taken from it)\n", s);
+            continue;
+        }
+        if (!(other && *other) && !env_file_note(s)) {
+            fprintf(stderr, "env: hookshot_env.txt: %s left out (too many switches in the file)\n", s);
             continue;
         }
 #ifdef _WIN32
