@@ -28,6 +28,7 @@ import shutil
 import stat
 import struct
 import sys
+import tempfile
 from time import monotonic
 
 
@@ -660,10 +661,22 @@ def stand_in_damaged(romfs, progress=None, damaged=None):
         damaged = damaged_game_files(romfs, progress)
     excluded = set(damaged)
     for path in damaged:
+        if os.path.islink(long_path(path)):   # (hookshot: this tool unpacks no links; one is left as it is)
+            continue
         other = stand_in_for(path, excluded)
         if other:
-            shutil.copyfile(long_path(other), long_path(path + ".part"))
-            os.replace(long_path(path + ".part"), long_path(path))
+            # (hookshot) copied into a new file of its own beside it, not a fixed <name>.part, which a folder from
+            # elsewhere could hold as a link to a file outside it
+            fd, staged = tempfile.mkstemp(prefix=".standin-", dir=long_path(os.path.dirname(path)))
+            try:
+                with os.fdopen(fd, "wb") as g, open(long_path(other), "rb") as f:
+                    shutil.copyfileobj(f, g)
+                os.chmod(staged, 0o644)   # (as the unpacked files: mkstemp's are the owner's only)
+                os.replace(staged, long_path(path))
+            except BaseException:
+                with suppress(FileNotFoundError):
+                    os.unlink(staged)
+                raise
         done.append((path, other))
     return done
 

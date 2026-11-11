@@ -452,12 +452,24 @@ def stand_in_damaged_files(out, romfs):
             known = nup.read_heads_text(rest)
     except OSError:
         pass
-    if known is None:
+    damaged = None
+    if known is not None and os.path.normcase(os.path.abspath(romfs)) == os.path.normcase(os.path.abspath(
+            os.path.join(out, "romfs"))):
+        # (each a .zs file under the romfs, by the extraction's own path rule: no .., absolute path or link on the way, as
+        # a folder from elsewhere carries this list too. One that is not: every file is checked instead)
+        try:
+            if all(rel.endswith(".zs") for rel in known):
+                for rel in known:
+                    nup.extraction_path(out, "romfs", rel)   # (the check alone: it stops on a path that does not pass)
+                damaged = [os.path.normpath(os.path.join(romfs, rel)) for rel in known]
+        except SystemExit:
+            damaged = None
+    if damaged is None:
         print("checking your game files for damaged textures (once after an unpack): every .zs file is opened, which can take "
               "minutes", flush=True)
         done = nup.stand_in_damaged(romfs, file_progress("checked"))
     else:   # (found while the .nup was extracted: no file opened again)
-        done = nup.stand_in_damaged(romfs, damaged=[os.path.normpath(os.path.join(romfs, rel)) for rel in known])
+        done = nup.stand_in_damaged(romfs, damaged=damaged)
     with open(checked, "w") as f:
         f.write(stamp)
     with contextlib.suppress(FileNotFoundError):
@@ -1145,17 +1157,34 @@ def copy_writable(src, dst):
     shutil.copyfile(src, dst)
 
 
-def refuse_dump_links(folder):
-    """An extracted dump holds only files and folders: a link in it was followed, and hard-linked or copied the file it
-    names (anywhere on this PC) into the game folder. The folder itself may be one. (Walked as a long path: #1468)"""
+def first_link(folder):
+    """The first link or reparse point under folder (not folder itself), or None. (Walked as a long path: #1468)"""
     for d, dirs, files in os.walk(long_path(folder)):
         for name in dirs + files:
             path = os.path.join(d, name)
             attrs = os.lstat(path)
             if stat.S_ISLNK(attrs.st_mode) or getattr(attrs, "st_file_attributes", 0) & getattr(
                     stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400):
-                fail("The game files at %s contain a link (%s): copy them without links and choose that folder."
-                     % (folder, path))
+                return path
+    return None
+
+
+def refuse_dump_links(folder):
+    """An extracted dump holds only files and folders: a link in it was followed, and hard-linked or copied the file it
+    names (anywhere on this PC) into the game folder. The folder itself may be one"""
+    path = first_link(folder)
+    if path:
+        fail("The game files at %s contain a link (%s): copy them without links and choose that folder." % (folder, path))
+
+
+def refuse_folder_links(folder):
+    """(hookshot) What this builder made in a game folder (its romfs, the kept .hookshot_exefs) holds only files and
+    folders: a link in one, as a folder from elsewhere can carry, was followed by the copy and the hard links into it and
+    read or wrote files outside the game folder"""
+    path = first_link(folder) if os.path.isdir(folder) else None
+    if path:
+        fail("The game folder's %s contains a link (%s), which this builder never makes: choose an empty folder to build "
+             "into." % (os.path.basename(folder), path))
 
 
 def long_path(p):
@@ -1523,6 +1552,7 @@ def main(a=None):
             fail("This game folder has no copy of the game files to update from: it was built before updates came in. Choose your game files "
                  "in Hookshot Builder and build into the same folder once; updates after that work by themselves.")
         check_cache_paths(out, (kept, romfs))
+        refuse_folder_links(kept)
         shutil.copytree(kept, exefs)
         check_modules(exefs)
         stand_in_damaged_files(out, romfs)   # (a folder unpacked by an earlier builder from a 23.3 GB dump)
@@ -1545,6 +1575,7 @@ def main(a=None):
                 same = f.read().strip() == stamp
         if same:
             print("the game was read from this .nup before: reading it again is skipped", flush=True)
+            refuse_folder_links(kept)
             shutil.copytree(kept, exefs)
         else:
             shutil.rmtree(game, ignore_errors=True)
@@ -1585,6 +1616,7 @@ def main(a=None):
         refuse_dump_links(a.romfs)
         shutil.copytree(a.exefs, exefs)   # (unpacked in place: the user's copy stays as it is)
         run(PY + ["nx2/unpack.py", exefs])
+        refuse_folder_links(romfs)   # (the earlier build's romfs the links go into)
         link_or_copy(a.romfs, romfs)
         shutil.rmtree(kept, ignore_errors=True)
         shutil.copytree(exefs, kept)
