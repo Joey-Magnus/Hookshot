@@ -196,13 +196,21 @@ static int write_zstd_raw(const char *path, const uint8_t *data, size_t n) {
     return ok;
 }
 
+/* (hookshot) the prompt files the builder makes are a few MB: a larger one (a folder from elsewhere, or a sparse file) is not
+   read into memory, and a file whose magic is wrong is left before its size is allocated */
+#define PROMPT_FILE_MAX (256L << 20)
 static uint8_t *read_all(const char *path, const char *magic, long *n) {   /* (the whole file, if it starts with magic: NULL any) */
     FILE *f = fopen(path, "rb");
     if (!f) return NULL;
+    char head[4];
+    if (magic && (fread(head, 1, 4, f) != 4 || memcmp(head, magic, 4))) {
+        fclose(f);
+        return NULL;
+    }
     fseek(f, 0, SEEK_END);
     *n = ftell(f);
     fseek(f, 0, SEEK_SET);
-    uint8_t *t = *n > 8 ? (uint8_t *)malloc((size_t)*n) : NULL;
+    uint8_t *t = *n > 8 && *n <= PROMPT_FILE_MAX ? (uint8_t *)malloc((size_t)*n) : NULL;
     const int got = t && fread(t, 1, (size_t)*n, f) == (size_t)*n;
     fclose(f);
     if (!got || (magic && memcmp(t, magic, 4))) {
