@@ -391,8 +391,12 @@ static int env_line_allowed(const char *name, const char *value) {
         "HOS_INPUT_SCRIPT", "HOS_SAMPLE_ALL", "HOS_WATCH", "HOOKSHOT_BUILDER_HOME", "RX_VK_SHOTS", "RX_VK_SHOT_GO",
         "RX_VK_FRAMELOG", "RX_VK_HANG_DUMP", "RX_VK_DUMP", "RX_VK_DUMP_SPV", "RX_VK_DUMP_MESH_SPV", "RX_VK_DUMP_STAGES",
         "RX_VK_DUMP_FAILED", "RX_VK_IR", "RX_VK_MENU_SCRIPT", "RX_DUMP_WGSL", "RX_DUMP_SLOW_WGSL", "RX_DUMP_TICS",
-        "RX_WGSL_OVERRIDE"};
+        "RX_WGSL_OVERRIDE", "RX_SCREENSHOT", "RX_FLASH_LOG", "HOS_SCAN_DT"};
     for (size_t i = 0; i < sizeof by_name / sizeof *by_name; i++) names_file |= !strcmp(name, by_name[i]);
+    /* (hookshot) and every dump switch by its family, not one by one (RX_VK_DUMP_NATIVE and RX_DUMP_IR had been left
+       out of the list above): RX_VK_DUMP*, RX_DUMP*, HOS_*_DUMP, RX_*_DUMPS. tests/test_env_file.py also looks through
+       the sources for switches whose value is a path and checks that this file cannot set them */
+    names_file |= strstr(name, "_DUMP") != NULL;
     /* RX_VK_DLSS_DIR: a folder on this PC, not a share (\\server\x or //server/x) or a device path */
     if (!strcmp(name, "RX_VK_DLSS_DIR"))
         return !((value[0] == '\\' || value[0] == '/') && (value[1] == '\\' || value[1] == '/'));

@@ -7,6 +7,7 @@ run does not fall back to the player's switches.
 python -I -B tests/test_env_file.py [--cc gcc]
 """
 import argparse
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -24,6 +25,46 @@ def block(text, marker):
     return text[start:end]
 
 
+# (a switch whose value is a path to write or read, as the sources read it: stored in a ..dir / ..path / ..file / ..folder
+# / ..prefix variable, or handed straight to fopen, open, CreateFile, LoadLibrary or dlopen. Each must be one
+# hookshot_env.txt cannot set; REVIEWED are the ones it may, on purpose)
+GETENV = r'(?:std::)?getenv\("((?:RX|HOS|HOOKSHOT|EDEN|NVN|TOTK|SDL)_[A-Z0-9_]+)"\)'
+PATH_VALUED = [re.compile(r"\b\w*(?:dir|path|file|folder|prefix)\w*\s*(?:\{|=)\s*" + GETENV, re.I),
+               re.compile(r"\b(?:_w?fopen|fopen|open|CreateFile[AW]?|LoadLibrary[AW]?|dlopen)\s*\(\s*" + GETENV)]
+REVIEWED = {"RX_VK_DLSS_DIR"}   # (a local folder for NVIDIA's runtime: env_line_allowed's own rule for it)
+
+
+def path_valued_switches():
+    found = {}
+    for folder, globs in (("host", ("*.c", "*.h")), ("gpu", ("*.c", "*.cpp", "*.h"))):
+        for g in globs:
+            for f in sorted((ROOT / folder).rglob(g)):
+                if "third_party" in f.parts or "tests" in f.parts:
+                    continue
+                text = f.read_text(encoding="utf-8", errors="replace")
+                for pattern in PATH_VALUED:
+                    for m in pattern.finditer(text):
+                        found.setdefault(m.group(1), f.relative_to(ROOT).as_posix())
+    return found
+
+
+def check_path_valued(cc, main_c, tmp):
+    found = path_valued_switches()
+    if len(found) < 15:   # (the patterns stopped matching the sources: the check would pass on nothing)
+        raise SystemExit("only %d path-valued switches found: update PATH_VALUED" % len(found))
+    src = tmp / "allowed.c"
+    src.write_text("#include <stdio.h>\n#include <string.h>\n" + block(main_c, "static int env_line_allowed(") +
+                   '\nint main(int c, char **v) { for (int i = 1; i < c; i++) if (env_line_allowed(v[i], "x")) '
+                   'puts(v[i]); return 0; }\n', encoding="utf-8")
+    subprocess.run([cc, "-std=c11", "-Wall", "-Werror", str(src), "-o", str(tmp / "allowed")], check=True)
+    names = sorted(set(found) - REVIEWED)
+    taken = subprocess.run([str(tmp / "allowed"), *names], capture_output=True, text=True, check=True).stdout.split()
+    if taken:
+        raise SystemExit("hookshot_env.txt can set switches whose value is a path: %s (block them in env_line_allowed, "
+                         "host/hos_main.c, or add them to REVIEWED)" % ", ".join("%s (%s)" % (n, found[n]) for n in taken))
+    print("PASS: none of the %d switches whose value is a path can be set from hookshot_env.txt" % len(names))
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--cc", default="gcc")
@@ -33,6 +74,7 @@ def main():
 
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
+        check_path_valued(a.cc, main_c, tmp)
         game = tmp / "game"
         game.mkdir()
         # (the player's file sets the game's switches only: not the system's variables, HOS_ENV_FILE or paths)
@@ -43,7 +85,8 @@ def main():
             "SDL_AUDIODRIVER=pulseaudio\nHOS_T_UP=..\nHOS_SAMPLE_FILE=hookshot_vk.dll\nRX_VK_FRAME_LOG=x.txt\n"
             "RX_VK_DUMP_DIR=dumps\nHOS_PRESENT_TRACE=t.txt\nRX_VK_DLSS_DIR=\\\\server\\share\n"
             "HOS_AUDIO_DUMP=image.bin\nRX_VK_HANG_DUMP=hookshot_options.ini\nRX_VK_SHOTS=user\n"
-            "HOS_INPUT_SCRIPT=1:A,2:A\nRX_VK_MENU_SCRIPT=1:INS\n", encoding="utf-8")
+            "HOS_INPUT_SCRIPT=1:A,2:A\nRX_VK_MENU_SCRIPT=1:INS\nRX_VK_DUMP_NATIVE=0\nRX_DUMP_IR=ir\nRX_SCREENSHOT=romfs\n"
+            "RX_FLASH_LOG=user\nHOS_SCAN_DT=x\nRX_VK_FLASH_DUMPS=6\nRX_FRAMEGEN_DUMP=1\n", encoding="utf-8")
         (tmp / "test_env.txt").write_text("# a test run's own switches\nHOS_T_OTHER=1\nHOS_T_SHARED=other\n"
                                           "VK_T_LAYER=/y\n", encoding="utf-8")
         exe = str(game / "hookshot").replace("\\", "\\\\")
@@ -81,6 +124,8 @@ int main(int argc, char **argv) {
     CHECK(is("HOS_SAMPLE_FILE", NULL) && is("RX_VK_DUMP_DIR", NULL) && is("HOS_T_HOME", NULL));
     CHECK(is("HOS_AUDIO_DUMP", NULL) && is("RX_VK_HANG_DUMP", NULL) && is("RX_VK_SHOTS", NULL));
     CHECK(is("HOS_INPUT_SCRIPT", NULL) && is("RX_VK_MENU_SCRIPT", NULL));
+    CHECK(is("RX_VK_DUMP_NATIVE", NULL) && is("RX_DUMP_IR", NULL) && is("RX_SCREENSHOT", NULL) && is("RX_FLASH_LOG", NULL));
+    CHECK(is("HOS_SCAN_DT", NULL) && is("RX_VK_FLASH_DUMPS", NULL) && is("RX_FRAMEGEN_DUMP", NULL));
     CHECK(is("RX_VK_SKIP_CODE", "2c56,ab") && is("RX_VK_DLSS_DIR", "/opt/ngx"));
     CHECK(is("SDL_VULKAN_LIBRARY", NULL) && is("SDL_VIDEO_EGL_DRIVER", NULL) && is("HOS_T_UP", NULL));
     CHECK(is("SDL_AUDIODRIVER", "pulseaudio") && is("HOS_SAMPLE_FILE", NULL) && is("RX_VK_FRAME_LOG", NULL));
