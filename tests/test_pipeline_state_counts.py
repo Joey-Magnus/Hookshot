@@ -22,7 +22,7 @@ def main():
     parser.add_argument('--cxx',default='clang++')
     args=parser.parse_args()
     text=(args.source/'gpu/vk/vk_draw.cpp').read_text(encoding='utf-8')
-    targets=block(text,'bool targets_ok(')+'\n'+block(text,'bool formats_ok(')
+    targets=block(text,'bool targets_ok(')+'\n'+block(text,'bool formats_ok(')+'\n'+block(text,'bool streams_ok(')
     # (version 2 records and a version 1 mesh record's numbering: tests/test_pipeline_state_portable.py. These records draw no mesh)
     actual='\n'.join((block(text,'constexpr char kStateMagic[8]')+';',block(text,'constexpr char kStateMagic2[8]')+';',
                        block(text,'struct StateRec {')+';',block(text,'struct StateRec2 {')+';',
@@ -81,6 +81,8 @@ int main(int argc,char** argv) {
  StateRec drawn=maximum,bad_color=maximum,bad_depth=maximum;
  drawn.color_format[0]=37;drawn.has_depth=1;drawn.depth_format=126;
  bad_color.color_format[7]=0x7fffffffu;bad_depth.has_depth=1;bad_depth.depth_format=37;
+ // (hookshot) vertex strides and divisors Vulkan takes: 2048 and 65535 at most
+ StateRec wide=maximum,far_div=maximum,edge=maximum;wide.stride[3]=4096;far_div.divisor[15]=0x10000;edge.stride[0]=2048;edge.divisor[0]=0xFFFF;
  bad_answers=maximum;bad_answers.nanswers=25;
  bad_questions=maximum;bad_questions.nquestions=33;
  huge=maximum;huge.nanswers=huge.nquestions=std::numeric_limits<uint32_t>::max();
@@ -102,6 +104,7 @@ int main(int argc,char** argv) {
   write(path,{bad_n,maximum,bad_topo});check(path,{maximum},"retain a valid record between bad targets");
   write(path,{samples16,samples8,samples64});check(path,{samples8},"sample counts the device does not draw with");
   write(path,{bad_color,drawn,bad_depth});check(path,{drawn},"formats the device does not draw to");
+  write(path,{wide,edge,far_div});check(path,{edge},"vertex strides and divisors past Vulkan's limits");
   write(path,{maximum,bad_answers,zero,bad_questions,maximum,huge,zero});
   check(path,{maximum,zero,maximum,zero},"retain valid records around rejected records");
   write(path,{maximum},sizeof(StateRec)-1);check(path,{maximum},"ignore truncated trailing record");

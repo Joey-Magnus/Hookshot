@@ -55,7 +55,7 @@ def main():
     shaders += '\n'.join(block(shader, m) for m in (
         'std::vector<Program::Answer> answers_portable(const Program& p)', 'std::vector<Program::Answer> answers_here(',
         'uint64_t portable_variant(const Program& p)'))
-    targets = block(draw, 'bool targets_ok(') + '\n' + block(draw, 'bool formats_ok(')
+    targets = block(draw, 'bool targets_ok(') + '\n' + block(draw, 'bool formats_ok(') + '\n' + block(draw, 'bool streams_ok(')
     states = '\n'.join([
         block(draw, 'struct Targets {', True), block(draw, 'void color_types_of('),
         'constexpr VkPrimitiveTopology kMeshDrawTopology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;',

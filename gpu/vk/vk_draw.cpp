@@ -1185,11 +1185,21 @@ bool formats_ok(uint32_t n, const uint32_t color[8], uint32_t has_depth, uint32_
     return !has_depth || depth == VK_FORMAT_UNDEFINED ||
            (is_depth_format((VkFormat)depth) && supports(depth, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT));
 }
+/// (hookshot) Vertex streams a pipeline can be made with: each stride within Vulkan's least maxVertexInputBindingStride (2048)
+/// and each divisor within 65535. They come from the notes and the shareable state list (the game's own are under 100 and 0-1),
+/// and any number reached vkCreateGraphicsPipelines, which a driver need not survive
+bool streams_ok(const uint32_t stride[16], const uint32_t divisor[16]) {
+    for (int i = 0; i < 16; i++)
+        if (stride[i] > 2048 || divisor[i] > 0xFFFF) return false;
+    return true;
+}
 /// (hookshot) a note read from hookshot_pipelines.bin: its counts in range, its booleans 0 or 1, and no host pointers (the
 /// render targets' objects of the run that wrote it mean nothing here)
 bool note_sane(PipeNote& n) {
+    uint32_t stride[16], divisor[16];
+    for (int i = 0; i < 16; i++) stride[i] = n.s.vstream[i].stride, divisor[i] = n.s.vstream[i].divisor;
     if (!targets_ok(n.n, n.samples, n.topo) || n.s.nvattr < 0 || n.s.nvattr > 16 ||
-        !formats_ok(n.n, n.color_format, n.has_depth, n.depth_format))
+        !formats_ok(n.n, n.color_format, n.has_depth, n.depth_format) || !streams_ok(stride, divisor))
         return false;
     n.s.rt = nvn_p_set_rt{};
     for (bool* b : {&n.s.has_prog, &n.s.restart, &n.s.depth_clamp, &n.s.raster_discard, &n.s.render_enabled}) {
@@ -1412,7 +1422,8 @@ bool state_v1_portable(StateRec& r) {
 }
 /// A version 2 record for this device (false: it cannot be, its counts out of range or a format this GPU does not draw to)
 bool state_v2_resolve(const StateRec2& v, StateRec& r) {
-    if (v.nanswers > std::size(v.answers) || v.nquestions > std::size(v.questions) || v.nvattr > 16 || !targets_ok(v.n, v.samples, v.topo))
+    if (v.nanswers > std::size(v.answers) || v.nquestions > std::size(v.questions) || v.nvattr > 16 || !targets_ok(v.n, v.samples, v.topo) ||
+        !streams_ok(v.stride, v.divisor))
         return false;
     r = StateRec{};
     std::memcpy(r.code, v.code, sizeof r.code);
@@ -1445,7 +1456,7 @@ std::vector<StateRec> state_list_read(const std::string& path, int* version = nu
             while (fread(&r, sizeof r, 1, f) == 1) {
                 if (r.nanswers > std::size(r.answers) || r.nquestions > std::size(r.questions) || r.nvattr > 16 ||
                     !targets_ok(r.n, r.samples, r.topo) || !formats_ok(r.n, r.color_format, r.has_depth, r.depth_format) ||
-                    !state_v1_portable(r))
+                    !streams_ok(r.stride, r.divisor) || !state_v1_portable(r))
                     continue;   // (hookshot: a pipeline is made from the rest: its counts must be ones it can have)
                 out.push_back(r);
             }
