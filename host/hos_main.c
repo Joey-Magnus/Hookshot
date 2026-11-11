@@ -425,7 +425,9 @@ static int env_line_allowed(const char *name, const char *value) {
         "RX_VK_FRAMELOG", "RX_VK_HANG_DUMP", "RX_VK_DUMP", "RX_VK_DUMP_SPV", "RX_VK_DUMP_MESH_SPV", "RX_VK_DUMP_STAGES",
         "RX_VK_DUMP_FAILED", "RX_VK_IR", "RX_VK_MENU_SCRIPT", "RX_DUMP_WGSL", "RX_DUMP_SLOW_WGSL", "RX_DUMP_TICS",
         "RX_WGSL_OVERRIDE", "RX_SCREENSHOT", "RX_FLASH_LOG", "HOS_SCAN_DT",
-        "RX_VK_FRAME_TRACE"};   /* (hookshot: hookshot_frames.csv, a line each frame without end) */
+        "RX_VK_FRAME_TRACE",   /* (hookshot: hookshot_frames.csv, a line each frame without end) */
+        "HOS_CONTROL", "HOS_CONTROL_MEM"};   /* (hookshot: the control bridge's socket, a bare name in the current folder,
+                                                and its guest memory reads and writes) */
     for (size_t i = 0; i < sizeof by_name / sizeof *by_name; i++) names_file |= !strcmp(name, by_name[i]);
     /* (hookshot) and every dump switch by its family, not one by one (RX_VK_DUMP_NATIVE and RX_DUMP_IR had been left
        out of the list above): RX_VK_DUMP*, RX_DUMP*, HOS_*_DUMP, RX_*_DUMPS. tests/test_env_file.py also looks through
