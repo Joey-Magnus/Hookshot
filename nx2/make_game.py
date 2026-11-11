@@ -105,6 +105,33 @@ def say(*words):
     print("@@" + " ".join(str(w) for w in words), flush=True)
 
 
+# (hookshot) what this builder writes at the top of a game folder (and in its bin): a link at one of these names, which a folder
+# from elsewhere can hold (an update builds into the folder as it is), was written through, and the file or folder it named
+# rewritten. tests/test_game_folder_links.py checks the list against the names this file joins to the folder
+FOLDER_WRITES = ["bin", "image.bin", "hookshot_version.txt", "language.txt", "hookshot.png", "hookshot_pipelines.bin",
+                 "hookshot_pipeline_states_shipped.bin", "hookshot_shaders.bin", "prompts", "ngx", "ffx", "romfs", ".game",
+                 ".hookshot_exefs", ".hookshot_romfs", ".hookshot_romfs_checked", ".hookshot_romfs_heads",
+                 ".hookshot_write_check"]
+
+
+def refuse_written_links(out, launcher_dir="bin"):
+    """No link at a name this builder writes in the game folder (FOLDER_WRITES, the game's files and their staged .new
+    copies), before anything is written there"""
+    staged = BESIDE + ["image.bin", "hookshot_pipeline_states_shipped.bin"]
+    names = [(out, n) for n in FOLDER_WRITES + BESIDE + [n + ".new" for n in staged]]
+    names += [(os.path.join(out, launcher_dir), n) for n in BESIDE + [n + ".new" for n in BESIDE]]
+    for folder, name in names:
+        path = os.path.join(folder, name)
+        at = long_path(path)   # (a path past 260 characters on Windows)
+        try:   # (WSL's links carry a tag of their own, which islink and isjunction do not see)
+            tag = getattr(os.lstat(at), "st_reparse_tag", 0)
+        except OSError:
+            tag = 0
+        if os.path.islink(at) or (hasattr(os.path, "isjunction") and os.path.isjunction(at)) or tag in LINK_TAGS:
+            fail("%s is a link, which Hookshot Builder never makes there: remove it, or choose an empty folder to build into."
+                 % path)
+
+
 def check_writable(out):
     """The game folder must take new files before anything is read into it. A folder under Program Files (or another protected
     place) only takes them with administrator rights, and the build used to stop minutes later inside nup.py with a bare
@@ -1157,14 +1184,20 @@ def copy_writable(src, dst):
     shutil.copyfile(src, dst)
 
 
-def first_link(folder):
-    """The first link or reparse point under folder (not folder itself), or None. (Walked as a long path: #1468)"""
+# (Windows) the reparse points that are links: a symbolic link, a junction (mount point), WSL's link. OneDrive marks its files
+# with others, and those are files
+LINK_TAGS = (0xA000000C, 0xA0000003, 0xA000001D)
+
+
+def first_link(folder, any_reparse=True):
+    """The first link under folder (not folder itself), or None; any_reparse: any reparse point counts. (Walked as a long
+    path: #1468)"""
     for d, dirs, files in os.walk(long_path(folder)):
         for name in dirs + files:
             path = os.path.join(d, name)
             attrs = os.lstat(path)
-            if stat.S_ISLNK(attrs.st_mode) or getattr(attrs, "st_file_attributes", 0) & getattr(
-                    stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400):
+            reparse = getattr(attrs, "st_file_attributes", 0) & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+            if stat.S_ISLNK(attrs.st_mode) or (reparse and (any_reparse or getattr(attrs, "st_reparse_tag", 0) in LINK_TAGS)):
                 return path
     return None
 
@@ -1181,7 +1214,7 @@ def refuse_folder_links(folder):
     """(hookshot) What this builder made in a game folder (its romfs, the kept .hookshot_exefs) holds only files and
     folders: a link in one, as a folder from elsewhere can carry, was followed by the copy and the hard links into it and
     read or wrote files outside the game folder"""
-    path = first_link(folder) if os.path.isdir(folder) else None
+    path = first_link(folder, any_reparse=False) if os.path.isdir(folder) else None   # (a folder OneDrive keeps: as it is)
     if path:
         fail("The game folder's %s contains a link (%s), which this builder never makes: choose an empty folder to build "
              "into." % (os.path.basename(folder), path))
@@ -1515,6 +1548,7 @@ def main(a=None):
     out = os.path.abspath(a.out)
     work = os.path.abspath(a.work)
     warn_slow_disk(out, work)   # (a warning, not a stop: a hard drive still builds, only much slower)
+    refuse_written_links(out)
     check_writable(out)
     # (linux) the compiler probe waits until the compile. The game-free cache test stops at the lift, and a missing
     # compiler is still said before the long compile, not after the package has been read
@@ -1777,7 +1811,7 @@ def main(a=None):
         staged.append((launcher, os.path.join(out, BESIDE[0])))
     for src, dst in staged:
         try:
-            if os.path.exists(dst + ".new"):
+            if os.path.lexists(dst + ".new"):   # (hookshot: a dangling link too, which copy2 wrote through)
                 os.remove(dst + ".new")
             shutil.copy2(src, dst + ".new")
         except PermissionError:

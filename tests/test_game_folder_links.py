@@ -6,7 +6,8 @@ a romfs into its romfs folder. Checked here without a game:
 - a heads list line that leaves the romfs (.., an absolute path, a link on the way) is not written to: the list is
   dropped and every file is checked instead;
 - a stand-in is copied into a new file of its own, not through a planted <name>.zs.part link;
-- a link inside the kept .hookshot_exefs, or inside the romfs the links go into, stops the build.
+- a link inside the kept .hookshot_exefs, or inside the romfs the links go into, stops the build;
+- so does a link at a name the builder writes in the folder (language.txt, bin, the staged .new files...).
 
 python -I -B tests/test_game_folder_links.py
 """
@@ -113,6 +114,79 @@ class GameFolderLinks(unittest.TestCase):
                          source.count("refuse_folder_links(kept)\n" + " " * 12 + "shutil.copytree(kept, exefs)") +
                          source.count("refuse_folder_links(kept)\n" + " " * 8 + "shutil.copytree(kept, exefs)"))
         self.assertIn("refuse_folder_links(romfs)", source.split("link_or_copy(a.romfs, romfs)")[0][-300:])
+
+    def test_onedrive_files_in_a_game_folder_are_files(self):
+        # (Windows' answers, made up here: a OneDrive file is a reparse point but not a link; a symbolic link is both)
+        import stat as st
+        from types import SimpleNamespace
+        from unittest import mock
+        folder = self.root / "onedrive"
+        (folder / "sub").mkdir(parents=True)
+        (folder / "sub" / "a.zs").write_bytes(ZSTD)
+        real = os.lstat
+
+        def tagged(tag):
+            def lstat(path, *a, **k):
+                if str(path).endswith("a.zs"):
+                    return SimpleNamespace(st_mode=st.S_IFREG | 0o644, st_file_attributes=0x400, st_reparse_tag=tag)
+                return real(path, *a, **k)
+            return lstat
+        quiet = contextlib.redirect_stdout(io.StringIO())
+        with mock.patch.object(make_game.os, "lstat", tagged(0x9000001A)), quiet:   # (IO_REPARSE_TAG_CLOUD_6)
+            make_game.refuse_folder_links(str(folder))
+            with self.assertRaises(SystemExit):   # (a dump folder: any reparse point, as before)
+                make_game.refuse_dump_links(str(folder))
+        for tag in (0xA000000C, 0xA0000003):   # (a symbolic link, a junction)
+            with mock.patch.object(make_game.os, "lstat", tagged(tag)), quiet, self.assertRaises(SystemExit):
+                make_game.refuse_folder_links(str(folder))
+
+    def test_links_at_the_names_the_builder_writes_stop_it(self):
+        game = self.root / "built"
+        (game / "bin").mkdir(parents=True)
+        victim = self.root / "victim.txt"
+        victim.write_bytes(b"victim")
+        quiet = contextlib.redirect_stdout(io.StringIO())
+        with quiet:
+            make_game.refuse_written_links(str(game))   # (a folder with none: as it is)
+            os.symlink(self.outside, game / "hookshot_programs.bin")   # (a cache the builder does not write: left as it is)
+            make_game.refuse_written_links(str(game))
+        for rel in ("language.txt", "hookshot_version.txt", "bin", "prompts", make_game.BESIDE[0] + ".new",
+                    "bin/" + make_game.BESIDE[0], "bin/" + make_game.BESIDE[1] + ".new", "image.bin.new"):
+            with self.subTest(rel=rel):
+                link = game / rel
+                if rel == "bin":
+                    os.rename(game / "bin", self.root / "bin-real")
+                os.symlink(victim, link)
+                try:
+                    with quiet, self.assertRaises(SystemExit):
+                        make_game.refuse_written_links(str(game))
+                finally:
+                    link.unlink()
+                    if rel == "bin":
+                        os.rename(self.root / "bin-real", game / "bin")
+        self.assertEqual(victim.read_bytes(), b"victim")
+        # (WSL's links: a tag islink does not see)
+        import stat as st
+        from types import SimpleNamespace
+        from unittest import mock
+        (game / "language.txt").write_text("en", encoding="utf-8")
+        real = os.lstat
+
+        def wsl(path, *a, **k):
+            if str(path).endswith("language.txt"):
+                return SimpleNamespace(st_mode=st.S_IFREG | 0o644, st_file_attributes=0x400, st_reparse_tag=0xA000001D)
+            return real(path, *a, **k)
+        with mock.patch.object(make_game.os, "lstat", wsl), quiet, self.assertRaises(SystemExit):
+            make_game.refuse_written_links(str(game))
+        (game / "language.txt").unlink()
+        source = (ROOT / "nx2" / "make_game.py").read_text(encoding="utf-8")
+        # (every name this file joins to the game folder is on the list, so a new one is checked too)
+        import re
+        joined = set(re.findall(r'os\.path\.join\((?:out|game_dir), "([^"]+)"', source)) | {make_game.HEADS}
+        self.assertEqual(sorted(joined - set(make_game.FOLDER_WRITES) - set(make_game.BESIDE)), [])
+        main = source[source.index("def main(a=None):"):]
+        self.assertLess(main.index("refuse_written_links(out)"), main.index("check_writable(out)"))
+        self.assertIn('if os.path.lexists(dst + ".new"):', main)
 
 
 if __name__ == "__main__":
