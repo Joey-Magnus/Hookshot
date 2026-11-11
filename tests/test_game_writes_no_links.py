@@ -8,6 +8,8 @@ the file it named. host/hos_fopen_write.h opens those with O_NOFOLLOW and only a
 Checked here, without a game:
 - hos_fopen_write refuses a link (to a file, or dangling: nothing is made where it points) and a FIFO (without waiting),
   writes and empties a regular file for "w"/"wb" and appends for "a"/"ab";
+- on Windows (its branch, with a stand-in windows.h) it refuses a symbolic link or junction at the name, and writes
+  OneDrive's files and plain ones;
 - in the files that write those, every fopen for writing goes through it, except the debugging writes that a switch
   turns on (ALLOWED: their counts).
 
@@ -78,6 +80,53 @@ int main(int argc, char **argv) {
 '''
 
 
+# (the Windows branch, built here with a stand-in windows.h: a symbolic link or junction at the name is not written, a
+# OneDrive file (another reparse point) and a plain file are)
+WINDOWS_H = r'''#pragma once
+typedef unsigned long DWORD;
+typedef void *HANDLE;
+#define INVALID_FILE_ATTRIBUTES ((DWORD)-1)
+#define INVALID_HANDLE_VALUE ((HANDLE)(long)-1)
+#define FILE_ATTRIBUTE_REPARSE_POINT 0x400
+typedef struct { DWORD dwFileAttributes, dwReserved0; } WIN32_FIND_DATAA;
+extern DWORD fake_attributes, fake_tag;
+static DWORD GetFileAttributesA(const char *p) { (void)p; return fake_attributes; }
+static HANDLE FindFirstFileA(const char *p, WIN32_FIND_DATAA *fd) { (void)p; fd->dwReserved0 = fake_tag; return (HANDLE)1; }
+static int FindClose(HANDLE h) { (void)h; return 1; }
+'''
+WINDOWS_FIXTURE = r'''#include <stdio.h>
+#include "hos_fopen_write.h"
+DWORD fake_attributes, fake_tag;
+static int writes(DWORD attributes, DWORD tag, const char *path) {
+    fake_attributes = attributes, fake_tag = tag;
+    FILE *f = hos_fopen_write(path, "w");
+    if (f) fclose(f);
+    return f != NULL;
+}
+int main(int argc, char **argv) {
+    (void)argc;
+    const int ok = writes(INVALID_FILE_ATTRIBUTES, 0, argv[1]) && writes(0x20, 0, argv[1]) &&
+                   writes(0x420, 0x9000001AUL, argv[1]) &&   /* (OneDrive: IO_REPARSE_TAG_CLOUD_6) */
+                   !writes(0x420, 0xA000000CUL, argv[1]) && !writes(0x420, 0xA0000003UL, argv[1]) &&
+                   !writes(0x420, 0xA000001DUL, argv[1]) && !hos_fopen_write(argv[1], "r");
+    puts(ok ? "PASS: on Windows, hos_fopen_write refuses symbolic links and junctions, writes OneDrive's and plain files"
+            : "FAIL: the Windows branch");
+    return !ok;
+}
+'''
+
+
+def check_windows(cc, tmp):
+    fake = tmp / "fake"
+    fake.mkdir()
+    (fake / "windows.h").write_text(WINDOWS_H, encoding="utf-8")
+    (tmp / "win.c").write_text(WINDOWS_FIXTURE, encoding="utf-8")
+    exe = tmp / "win"
+    subprocess.run([cc, "-std=c11", "-D_WIN32", "-Wall", "-Werror", "-Wno-unused-function", "-I", str(fake), "-I",
+                    str(ROOT / "host"), str(tmp / "win.c"), "-o", str(exe)], check=True)
+    subprocess.run([str(exe), str(tmp / "plain_win.txt")], check=True, timeout=30)
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--cc", default="gcc")
@@ -94,6 +143,18 @@ def main():
     if bad:
         sys.exit("\n".join(bad))
     print("PASS: the game's own writes in %d files go through hos_fopen_write" % len(ALLOWED))
+    # (the back end's objects are keyed by the headers they see: the host's it includes must be among them, or a change
+    # to hos_fopen_write.h left vk_draw.cpp's object with the old code)
+    included = set()
+    for f in (ROOT / "gpu" / "vk").glob("*.[ch]*"):
+        included.update(re.findall(r'#include "\.\./\.\./host/([\w.]+)"', f.read_text(encoding="utf-8", errors="replace")))
+    build = (ROOT / "nx2" / "build.py").read_text(encoding="utf-8")
+    keyed = re.search(r'vdeps \+= b"".join\(open\(os\.path\.join\(HOST, h\), "rb"\)\.read\(\) for h in \(([^)]*)\)\)', build)
+    keyed = set(re.findall(r'"([\w.]+)"', keyed.group(1))) if keyed else set()
+    if not included or not included <= keyed:
+        sys.exit("nx2/build.py: the back end's object keys leave out the host headers it includes: %s"
+                 % ", ".join(sorted(included - keyed)))
+    print("PASS: the back end's object keys hold the %d host headers it includes" % len(included))
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         src = tmp / "fopen_write.c"
@@ -108,6 +169,7 @@ def main():
         os.symlink(files / "made_by_the_link", files / "language.txt")
         os.mkfifo(files / "fifo")
         subprocess.run([str(exe), str(files)], check=True, timeout=30)
+        check_windows(a.cc, tmp)
 
 
 if __name__ == "__main__":
