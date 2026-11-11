@@ -140,6 +140,33 @@ class GameFolderLinks(unittest.TestCase):
             with mock.patch.object(make_game.os, "lstat", tagged(tag)), quiet, self.assertRaises(SystemExit):
                 make_game.refuse_folder_links(str(folder))
 
+    def test_onedrive_files_keep_the_known_damaged_list(self):
+        """(a game folder OneDrive keeps: the extraction's list of damaged textures is still taken, not every file opened)"""
+        import stat as st
+        from types import SimpleNamespace
+        from unittest import mock
+        import nup
+        real = os.lstat
+
+        def tagged(tag):
+            def lstat(path, *a, **k):
+                if str(path).endswith("a_Alb.bntx.zs"):
+                    return SimpleNamespace(st_mode=st.S_IFREG | 0o644, st_file_attributes=0x400, st_reparse_tag=tag,
+                                           st_nlink=1)
+                return real(path, *a, **k)
+            return lstat
+        for tag, fast in ((0x9000001A, True), (0xA000000C, False)):   # (OneDrive's; a symbolic link's)
+            with self.subTest(tag=hex(tag)):
+                (self.out / ".hookshot_romfs_checked").unlink(missing_ok=True)
+                self.heads("Model/a_Alb.bntx.zs")
+                calls = []
+                with mock.patch.object(nup.os, "lstat", tagged(tag)), \
+                        mock.patch.object(nup, "stand_in_damaged", lambda romfs, progress=None, damaged=None:
+                                          calls.append(damaged) or []):
+                    self.stand_in()
+                self.assertEqual(len(calls), 1)
+                self.assertEqual(calls[0] is not None, fast, "the known list was %s" % ("dropped" if fast else "taken"))
+
     def test_links_at_the_names_the_builder_writes_stop_it(self):
         game = self.root / "built"
         (game / "bin").mkdir(parents=True)

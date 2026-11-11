@@ -487,7 +487,8 @@ def stand_in_damaged_files(out, romfs):
         try:
             if all(rel.endswith(".zs") for rel in known):
                 for rel in known:
-                    nup.extraction_path(out, "romfs", rel)   # (the check alone: it stops on a path that does not pass)
+                    # (the check alone: it stops on a path that does not pass. OneDrive's own reparse points are files)
+                    nup.extraction_path(out, "romfs", rel, links_only=True)
                 damaged = [os.path.normpath(os.path.join(romfs, rel)) for rel in known]
         except SystemExit:
             damaged = None
