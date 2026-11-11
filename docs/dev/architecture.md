@@ -180,6 +180,7 @@ wait). Results persist across runs; see
 | Guest threads | `hos_thread.c` | One host thread per `nn::os::CreateThread`, with a 64 MB host stack |
 | Replay | the submitting guest thread | By default the replay runs synchronously on the thread that submits, pinned while it runs to a core kept free of the game's threads (`hos_reserved_cpus`). `RX_VK_ASYNC=1` moves it to a thread of its own |
 | Replay workers | `vk_replay.cpp` | With `RX_VK_PARALLEL`, large command buffers are recorded in segments on several threads |
+| Presenter | `vk_replay.cpp` | Where the device has a second queue that can present, each present is made on this thread and queue once the frame's copy into the window is done, so the game's thread carries on (`RX_VK_PRESENT_THREAD=0`: presents on the game's thread) |
 | Recorder | `vk_recorder.h` | With `RX_VK_RECORDER=thread`, the Vulkan calls of the replay are made by a recorder thread from a ring |
 | Background workers | `vk_jobs.cpp` | Shader translation and pipeline builds: a third of the CPU threads, 2 to 4 |
 | Capture helpers | `vk_memory.cpp` | Split large submit-time memory captures (`RX_VK_CAPTURE_THREADS`, 0 to 4) |

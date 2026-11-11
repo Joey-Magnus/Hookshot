@@ -46,7 +46,7 @@ not the `.nup`, not `romfs` or `exefs`, and not the built game folder.
 | "Hookshot supports build e0f3ccfa" or "This version isn't supported" | Your game isn't the supported version. Check that you chose the right game with update v131072 installed (see [What you need](install.md#what-you-need)) |
 | The game opens and closes, or the log says "device lost" | Update your graphics driver. If it keeps happening, try **Mesh shaders: Compute** on the Graphics tab, then restart |
 | Steam Deck: the game freezes and closes in Kokiri Forest or inside the Great Deku Tree, and `journalctl -k` shows `gfx_0.0.0 timeout` | Add `RX_VK_MESH_NOCULL=2c56dc1006942f74` to [`hookshot_env.txt`](#hookshot_envtxt). Everything is still drawn. `RX_VK_SKIP_CODE=2c56dc1006942f74` also avoids the freeze, but some models go missing |
-| The game is in the wrong language | Open `language.txt` in the game folder, change the code to one of those listed in it, save, and start the game again |
+| The game is in the wrong language | Open `language.txt` in the game folder, change the code to one of those listed in it, save, and start the game again. Updates keep the language you set |
 
 ## Picture problems
 
@@ -76,9 +76,25 @@ shows "Set by RX_VK_ASTC_RGBA8" and can't be changed; remove the line to choose 
 
 | What you see | What to do |
 |---|---|
-| Short stutters the first time you see something | Normal: the graphics card is finishing setting up what it draws there. Passing through the same place again is smooth |
+| Short stutters the first time you see something | Normal: the graphics card is finishing setting up what it draws there. Passing through the same place again is smooth. You can help remove these stutters for everyone: [send your pipeline list](#send-your-pipeline-list) |
 | Windows, NVIDIA: stutter in places you've already seen, at every start | The driver's shader cache is too small to keep everything the game prepares (about 2 GB on the first start). In the NVIDIA Control Panel, open **Manage 3D settings** and set **Shader Cache Size** to **Unlimited** (or 10 GB). On Linux the game raises this limit itself |
 | Low frame rate, or stalls that come and go | Pick a lower **Quality preset** on the Graphics tab, or a smaller **VRAM budget** if your card has little video memory. On Linux with an AMD card, check for the [udmabuf warning](#linux-udmabuf-warning) |
+
+### Send your pipeline list
+
+The first time the game meets a new pipeline (a combination of shaders and drawing state), it has to build it on the
+spot, and that stutters. Releases ship a list of known pipelines and build them before the title screen. Your play adds
+to that list:
+
+1. Open the menu, go to the **Debug** tab and choose **Save my pipeline list** (under Developer). Or press **Save my
+   pipeline list** on the builder's launcher page for your game.
+2. It saves `hookshot-pipelines-<date>.zip` in your Downloads folder, copies a filled-in report to the clipboard, and
+   opens the [Submit your pipelines](https://github.com/NotRexed/Hookshot/issues/2034) issue in your browser.
+3. Attach the zip to a comment there, paste the report, and say where you played.
+
+The zip holds only `hookshot_pipeline_states.bin` (shader hashes, formats and drawing state: no game code, game data or
+personal information) and the report (version, system, graphics card and driver, resolution, upscaler, frame
+generation, HDR, and the mods the game loaded). Nothing is uploaded for you.
 
 ### Reporting low FPS or stutter
 
@@ -172,6 +188,7 @@ After a group change, log out and back in (or restart the service) so it takes e
 | What you see | What to do |
 |---|---|
 | "Your antivirus removed part of the build tools" | A false alarm on unsigned programs. Restore the files from Windows Security's **Protection history**, or add `%LOCALAPPDATA%\HookshotBuilder` to its exclusions, then press **Repair** |
+| Windows setup says the Builder's files are incomplete, or the Builder won't start after installing | Run the official `HookshotBuilder.exe` setup again. If it reports missing startup files again, check your antivirus's quarantine or protection history for files removed from that folder, restore them or add an exclusion, then retry. Installing .NET separately doesn't help: the Builder carries its own runtime. You can still start an already-built game from `hookshot.exe` in its folder |
 | "This version isn't supported. Hookshot needs build e0f3ccfa." | The game files you chose aren't the supported version (see [What you need](install.md#what-you-need)) |
 | The build stopped with an error | On Windows, press **Copy for a bug report** and paste it into a [report](https://github.com/NotRexed/Hookshot/issues/new/choose) |
 

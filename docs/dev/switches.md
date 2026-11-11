@@ -103,7 +103,7 @@ developers and testers.
 | `HOS_FPS_MAX` | `61` to `1000` | **Player.** A frame rate cap for this run, over the Frame rate cap row. `1000` is Uncapped; a value of 60 or less is 60 |
 | `HOS_DPI_UNAWARE` | (set) | **Player.** Windows: the game does not declare itself DPI-aware, so Windows scales the window |
 | `HOS_WINDOW_NOACTIVATE` | (set) | Windows: the window opens behind the others and does not take the focus |
-| `HOS_HEADLESS` | (set) | No window: the renderer draws offscreen, for screenshots and frame dumps |
+| `HOS_HEADLESS` | (set) | No window: the renderer draws offscreen, for screenshots and frame dumps. The menu's **Save my pipeline list** then opens nothing (no browser, folder or clipboard) |
 | `RX_VK_STARTUP_SCREEN` | `0` | No start-up screen while the game starts and prepares its shaders |
 
 ## Graphics for one run
@@ -180,6 +180,7 @@ The upscalers themselves are described in [upscaling](../user/upscaling.md). The
 
 | Switch | Values | What it does |
 |---|---|---|
+| `RX_VK_GM_LOOP` | `0`, `1` | How a global memory access's storage-buffer tables are searched: in a loop (`1`) or written out entry by entry (`0`). On by default on Intel, whose compiler didn't finish the culling programs with the entries written out |
 | `RX_VK_MESH_NOCULL` | key prefixes | **Player.** Turns off culling in the task shaders whose native code key starts with one of the prefixes: every meshlet is drawn and the rasterizer clips what is off screen. On a Steam Deck, `2c56dc1006942f74` avoids the GPU hang in Kokiri Forest and the Great Deku Tree without leaving anything out. It costs some GPU time, so it is off unless set. The log says "culling off, every meshlet drawn" for each task shader it changed |
 | `RX_VK_SKIP_CODE` | key prefixes | **Player.** Leaves out the draws of every program with a stage whose native code key starts with one of the prefixes (the keys the log prints after "its code:"). A workaround: on a Steam Deck `2c56dc1006942f74` also avoids the hang, but the models those task + mesh programs draw are missing. Prefer `RX_VK_MESH_NOCULL` |
 | `RX_VK_TASK_MESH_FALLBACK` | `0`, `1` | **Player.** Task + mesh draws through the compute fallback (`1`) or the driver's mesh shaders (`0`). Default: the fallback on AMD Navi 21 and Navi 22 on Windows (RX 6800, 6800 XT, 6900 XT, 6950 XT, 6700 XT), where the native path times out the driver; the Mesh shaders row's Native turns it off |
@@ -204,6 +205,7 @@ The upscalers themselves are described in [upscaling](../user/upscaling.md). The
 | `RX_VK_HANG_DUMP` | a file | Windows: every thread's stack written to the file once no frame was shown for `RX_VK_HANG_SEC` seconds |
 | `RX_VK_HANG_SEC` | seconds, at least 5 | Default 20 |
 | `RX_VK_ASYNC` | `1` | The replay on a thread of its own instead of the game's submitting thread |
+| `RX_VK_PRESENT_THREAD` | `0` | Off: each present is made on the game's thread. On by default where the device has a second queue that can present (a second queue of the replay's family, else a compute family's): the present goes to a thread and queue of its own once the frame's copy into the window is done, and the game's thread carries on. At most one present is outstanding |
 | `RX_BACKEND` | `vulkan`, or another name | Unset or `vulkan`: `hookshot_vk.dll`. Any other value: the WebGPU renderer, when the executable was built with one |
 | `HOS_TRACE` | `1` | Every Horizon OS call logged, as the `--trace` argument does |
 | `HOS_VCORES` | `0` | No virtual cores |
@@ -301,6 +303,7 @@ the screenshot size rules, the flash detector's sampling and the geometry log wi
 | `HOS_PROFILE` | seconds | Every interval, the busiest threads in the log. It also starts the samplers below |
 | `HOS_SAMPLE` + `HOS_SAMPLE_FILE` | a thread, a file | One thread's stacks, sampled every millisecond (needs `HOS_PROFILE`). `python -I scripts/prof.py <file>` reads them |
 | `HOS_SAMPLE_ALL` | a file | Every game and renderer thread every 2 ms while `<file>.go` exists (needs `HOS_PROFILE`). `scripts/crit.py`, `scripts/vkprof.py`, `scripts/hotlist.py` and `scripts/cpu_report.py` read it; see the [CPU profile](cpu-profile.md) |
+| `HOS_CHAIN` | a file | While `<file>.go` exists, records every blocking wait of a game thread, every signal that can end one, every sleep and every present (time, thread, object, caller), written to `<file>` when `<file>.go` goes away. `python -I scripts/chain.py <file> [<HOS_SAMPLE_ALL file>]` walks each frame back from its present and prints its critical path by thread |
 | `RX_MAPS` | the game folder | For the profile readers on Linux: name frames from that folder's `hookshot` and `hookshot_vk.so` |
 | `HOS_THREAD_TIMES` | seconds | Every interval, the threads that used over 5% of a core |
 | `HOS_FPS_LOG` | (set) | The game's frame limiter, VRR flags and nominal rate every 300 presents, and the game clock's speed (1.000 is real time) |
@@ -319,7 +322,8 @@ tens of gigabytes; on a hard drive `make_game.py` warns and builds anyway.
 |---|---|---|
 | `HOOKSHOT_JOBS` | `<n>` | Compilers at once (or `--jobs`). Default one per CPU thread, each started when the free memory holds it |
 | `HOOKSHOT_MEM_GATE` | `0` | Starts compilers without the free-memory check |
-| `HOOKSHOT_LIFT_JOBS` | `<n>` | Processes that write the lifted C. Default the cores, at most 16 |
+| `HOOKSHOT_LIFT_JOBS` | `<n>` | Processes that write the lifted C and make its edits. Default the cores, at most 16, and one per 2 GB of free memory |
+| `RX_HOT_OPT` | `O1`, `O2` | The optimisation level of the hot pieces (`code_hot_*.c`), default `O2`. `O1` for [a faster build for development](building.md#a-faster-build-for-development) |
 | `HOOKSHOT_KEEP_BUILD_FILES` | `1` | Keeps the lifted C and the objects after a build, so the next one compiles only what changed |
 | `HOOKSHOT_MINGW` | a folder | The llvm-mingw to build with |
 | `HOOKSHOT_MSVC` | `1` | The Visual Studio route instead |

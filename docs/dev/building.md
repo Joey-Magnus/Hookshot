@@ -331,6 +331,38 @@ recorded at 360p. Refresh the tour's list before each release, and after a chang
 state a pipeline is made from. When the record format changes (`MAGIC` and `SIZE` in `nx2/pipeline_states.py`), old
 lists no longer read and the release checks stop: convert each source or record it again.
 
+
+Players send their lists with **Save my pipeline list** (the menu's Debug tab: `gpu/vk/pipeline_share.h`,
+`share_pipeline_list` in `vk_menu.cpp`; the builders: `nx2/pipeline_share.py`, which the Linux builder imports and the
+Windows one runs with `--json`). It checks the list as `pipeline_states.py --check` does, writes
+`hookshot-pipelines-<date>.zip` to Downloads with exactly two files (the list and `hookshot_pipeline_report.txt`, the
+issue template filled in), copies the template, shows the folder and opens the "Submit your pipelines" issue; with
+`HOS_HEADLESS` it opens nothing. By hand: `python -I nx2/pipeline_share.py <game folder> [--out-dir <folder>]`.
+`tests/test_pipeline_share.py` covers it.
+
+## A faster build for development
+
+The eight hot pieces of lifted code (`code_hot_*.c`, the functions the game spends its time in) are built at `-O2`
+with the play profile. They're a small part of the lifted C but about a third of its compile time, and each is one of
+the longest single compiles. When you're checking that something works (the game starts, a menu, a screenshot, a log)
+and not how fast it runs, build them at `-O1` like every other lifted file:
+
+```sh
+RX_HOT_OPT=O1 python -I nx2/build.py --standalone --jobs 8
+```
+
+That saves about a quarter of the compile time. `build.py` run on its own uses no profile unless `RX_PGO` is set, and
+lacks the rest of `make_game.py`'s environment (`RX_RELEASE`, `A64_HOT_CHUNK`), so its objects differ from a
+`make_game.py` build's. Through `make_game.py`, `RX_HOT_OPT=O1` still uses the shipped profile and saves less.
+
+Objects are cached by their flags, so `-O1` and `-O2` objects sit side by side: in the checkout's own `work/` (or with
+`HOOKSHOT_KEEP_BUILD_FILES=1`), switching back and forth neither lifts again nor recompiles. In any other `--work`
+folder, `make_game.py`'s clean-up keeps only the last build's objects, so each switch lifts again and recompiles the hot
+pieces.
+
+**Never use it for numbers:** no frame-rate or frame-time measurements, build timings, stutter checks or profiles, and
+no release or player build.
+
 ## Compilers and memory
 
 By default the build starts up to one compiler per CPU thread, each only when the free memory holds it. It counts a

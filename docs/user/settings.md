@@ -48,7 +48,7 @@ Graphics and Debug tabs list it under **Restart needed**. When you close the men
 first, because anything since your last save is lost. In the tables below, these rows say "Applies after a restart".
 
 **Rows you may not see.** The menu hides rows that your PC can't use. NVIDIA Reflex, AMD Anti-Lag 2 and the DLSS
-model appear only on graphics cards that support them, and the HDR brightness rows appear only while HDR is on.
+model appear only on graphics cards that support them, the HDR brightness rows appear only while HDR is on, and the HDR tone mapper only with HDR set to Native.
 
 ## Quality presets
 
@@ -92,6 +92,7 @@ For more on the Upscaler, Render resolution and Frame generation, and how to pic
 | HDR paper white | 80 to 400 nits, in steps of 10 | 200 nits | How bright white looks with HDR on. Around 200 suits a normal room; go higher in a bright one. Shown only with HDR on |
 | HDR peak brightness | 400 to 4000 nits, in steps of 100 | 1000 nits | The brightest highlights with HDR on. Set it to your display's peak brightness. Shown only with HDR on |
 | HDR contrast | 50% to 200%, in steps of 5 | 100% | Above 100%, deeper shadows and brighter highlights; below, a flatter picture. Works with both Expanded and Native. Shown only with HDR on |
+| HDR tone mapper | Vanilla, PsychoV35 | Vanilla | With HDR set to Native, how the scene's brightness fits your display. **Vanilla** is the game's own curve. **PsychoV35** (from RenoDX) keeps the same mid-grey and lets highlights roll off into the peak brightness with their colour kept. DLSS, FSR and the game's TAAU don't use it yet |
 | Game frame rate cap | 60 (the console's), 90, 120, 144, 165, 240, Uncapped | 60 (the console's) | The most frames the game itself draws each second. Frame generation adds frames on top. Above 60 is experimental: the game keeps the right speed, but some cutscenes and bosses (such as Gohma) can misbehave. **Uncapped** runs as fast as your PC can, still limited by the display with V-Sync on. Applies after a restart |
 | NVIDIA Reflex | Off, On, On + Boost | Off | Lowers input delay by starting each frame as late as possible. **On + Boost** also keeps the card's clocks up. Works with frame generation. Shown only on NVIDIA cards whose driver supports it |
 | AMD Anti-Lag 2 | Off, On | Off | Lowers input delay by starting each frame as late as possible. Not used while frame generation is on. Shown only on AMD cards whose driver supports it |
@@ -107,8 +108,8 @@ For more on the Upscaler, Render resolution and Frame generation, and how to pic
 | Sharpness | 0% to 100%, in steps of 10 | 0% | Sharpens the picture as it goes to the window. Too much leaves halos around edges. DLSS looks softer than the game's own upscaler, so around 80% suits it |
 | Anisotropic filtering | Game's, 2x, 4x, 8x, 16x | 16x | Keeps textures sharp on surfaces seen at an angle, such as the ground ahead. **Game's** is the Switch's own, which is blurrier |
 | Profile | Docked, Handheld | Docked | Runs the game as the Switch does when docked, or in handheld mode. **Handheld** draws at 1536x864, softer but lighter on the card. Applies after a restart |
-| Ultrawide | Off (16:9), Monitor's shape | Off (16:9) | **Monitor's shape** widens or narrows the view to fit a screen that isn't 16:9, such as 21:9, 32:9, 4:3 or 16:10. The HUD stays in the middle 16:9. Applies after a restart |
-| Ultrawide menus | Full width; Centred, blurred sides; Centred, black bars | Centred, blurred sides | With Ultrawide on, how the pause, item and map menus fill a wide screen: stretched across it, in the middle with the game blurred at the sides, or in the middle with black bars. Loading screens and movies get the same sides. Changes at once |
+| Aspect ratio | 16:9, Monitor's shape | Monitor's shape | **Monitor's shape** widens or narrows the view to fit a screen that isn't 16:9, such as 21:9, 32:9, 4:3 or 16:10; the HUD stays in the middle 16:9. **16:9** keeps the game's own shape. Applies after a restart |
+| Ultrawide menus | Full width; Centred, blurred sides; Centred, black bars | Centred, blurred sides | With the Aspect ratio at Monitor's shape, how the pause, item and map menus fill a wide screen: stretched across it, in the middle with the game blurred at the sides, or in the middle with black bars. Loading screens and movies get the same sides. Changes at once |
 | Mesh shaders | Automatic, Native, Compute | Automatic | How the card draws much of the scenery. **Automatic** uses the card's mesh shaders where it has them. **Compute** works on every card and is usually a little slower; try it if objects are missing or the game crashes. Applies after a restart |
 
 **Render resolution choices.** The steps depend on the Upscaler. Each shows the size it draws at.
@@ -242,5 +243,6 @@ them as they are otherwise. All of them apply after a restart.
 |---|---|---|---|
 | Descriptor reuse | Off, On | On | A rendering shortcut that reduces stutter while the game streams textures |
 | Sampler cache | Off, On | Off | A rendering shortcut that can help while the game streams textures |
+| Save my pipeline list | (an action) | | Saves the pipelines your play built, with a report, as a zip in Downloads, for the "Submit your pipelines" issue. Helps remove first-visit stutter for everyone. See [send your pipeline list](troubleshooting.md#send-your-pipeline-list) |
 | Robust buffers | Auto, Off, On | Auto | Guards the graphics card against out-of-range reads. **Auto** is on for every card. **Off** can be faster on some NVIDIA cards |
 | ASTC as RGBA8 | Off, On | Off | A workaround for broken or blocky textures seen on some AMD cards. Uses far more video memory. See [troubleshooting](troubleshooting.md) |

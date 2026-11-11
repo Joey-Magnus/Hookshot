@@ -115,8 +115,9 @@ kept.
 | Kept | Replaced |
 |---|---|
 | Your saves | The game itself (`bin`, `image.bin`, the shader list) |
-| `hookshot_options.ini`: menu settings and controls | `language.txt`, rewritten with your game language |
+| `hookshot_options.ini`: menu settings and controls | |
 | `hookshot_env.txt` | |
+| `language.txt`: the game language you set | |
 | The `mods` folder | |
 
 Your original game files are kept in the game folder, so you don't need the `.nup` again. It's still a good idea to
