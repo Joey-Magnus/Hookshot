@@ -66,8 +66,11 @@ void logf(const char* fmt, ...) {
     std::printf("\n");
     std::fflush(stdout);
 }
-[[noreturn]] void device_lost() {
-    std::printf("device_lost\n");
+typedef int HANDLE;
+static HANDLE GetCurrentThread() { return 0; }
+static void SetThreadDescription(HANDLE, const wchar_t*) {}
+[[noreturn]] void device_lost(const char* why = nullptr) {
+    std::printf("device_lost: %s\n", why ? why : "(VK_ERROR_DEVICE_LOST)");
     std::fflush(stdout);
     std::_Exit(3);
 }
@@ -76,7 +79,7 @@ int main(int argc, char** argv) {
     mode = argc > 1 ? argv[1] : "";
     gpu_hang_watch_start();
     gpu_hang_watch_start();   // (once only)
-    std::this_thread::sleep_for(std::chrono::seconds(5));
+    std::this_thread::sleep_for(std::chrono::milliseconds(3500));
     std::printf("still running\n");
     return 0;
 }
@@ -111,16 +114,18 @@ def main():
 
         code, out, took = run(exe, "stuck", 2)
         print(out, end="")
-        if code != 3 or "GPU hang" not in out or not 1.5 < took < 4.5:
+        if code != 3 or "device_lost: the GPU hung" not in out or not 1.5 < took < 3.4:
             raise SystemExit("FAIL: a stuck timeline did not end the process after the limit (exit %d, %.1f s)" % (code, took))
+        if "ends the game (RX_VK_GPU_HANG_SEC)" not in out:
+            raise SystemExit("FAIL: the hang watch does not log the limit it settled on")
         code, out, took = run(exe, "lost", 30)
-        if code != 3 or took > 2.5:
+        if code != 3 or took > 2.5 or "(VK_ERROR_DEVICE_LOST)" not in out:
             raise SystemExit("FAIL: a lost device did not end the process at once (exit %d, %.1f s)" % (code, took))
         code, out, _ = run(exe, "moving", 2)
         if code != 0 or "device_lost" in out:
             raise SystemExit("FAIL: a timeline that keeps moving was taken as a hang")
         code, out, _ = run(exe, "stuck", 0)
-        if code != 0 or "device_lost" in out:
+        if code != 0 or "device_lost" in out or "only logged" not in out:
             raise SystemExit("FAIL: RX_VK_GPU_HANG_SEC=0 ended the process")
     print("PASS: a stuck GPU timeline or a lost device ends the process with the report; a moving one and =0 do not")
 

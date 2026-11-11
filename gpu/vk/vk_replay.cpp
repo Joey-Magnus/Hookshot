@@ -2632,11 +2632,12 @@ uint64_t vk_retirement_value() {
 /// submission completed again, so no capture or staging arena was let go, and system memory filled until the window was
 /// closed (issue 1275: captures kept 25 -> 6527, staging 256 -> 1408 MB). Now the report once (a thread that sees the loss
 /// too waits for it, instead of ending the process before it is written), then the process ends as replay_fatal does
-[[noreturn]] void device_lost() {
+[[noreturn]] void device_lost(const char* why) {
     static std::once_flag once;
     std::call_once(once, checkpoints_report);
-    replay_fatal("the GPU device was lost (VK_ERROR_DEVICE_LOST): the driver stopped or reset the GPU, and nothing sent "
-                 "to it runs any more (on Linux, dmesg or journalctl -k around this time names the reset)");
+    replay_fatal(why ? why
+                     : "the GPU device was lost (VK_ERROR_DEVICE_LOST): the driver stopped or reset the GPU, and nothing sent "
+                       "to it runs any more (on Linux, dmesg or journalctl -k around this time names the reset)");
 }
 
 /// (hookshot) A GPU hang the driver never reports as a lost device. RTX 4070 Ti, NVIDIA 595.99.02, Linux, Hyrule Castle: the
@@ -2651,7 +2652,11 @@ void gpu_hang_watch_start() {
     if (!timeline || started.exchange(true)) return;
     const char* e = getenv("RX_VK_GPU_HANG_SEC");
     const int limit = e ? std::max(0, atoi(e)) : 30;
+    // (atoi reads a typo as 0, which turns the exit off: the value it settled on is logged)
+    if (limit) logf("vk: GPU hang watch: work that finishes nothing for %d s ends the game (RX_VK_GPU_HANG_SEC)", limit);
+    else logf("vk: GPU hang watch: a stall is only logged (RX_VK_GPU_HANG_SEC=%s)", e);
     std::thread([limit] {
+        SetThreadDescription(GetCurrentThread(), L"mkw_vk gpu hang watch");
         uint64_t last = 0;
         int still = 0;
         for (;;) {
@@ -2668,9 +2673,11 @@ void gpu_hang_watch_start() {
                 logf("vk: the GPU has finished nothing for %d s: the timeline at %llu, %llu sent (RX_VK_GPU_HANG_SEC=%d)",
                      still, (unsigned long long)done, (unsigned long long)sent, limit);
             if (limit && still >= limit) {
-                logf("vk: GPU hang: no submission finished in %d s and the driver did not report the device lost (on "
-                     "NVIDIA, journalctl -k names an Xid)", still);
-                device_lost();
+                static char why[256];
+                std::snprintf(why, sizeof why, "the GPU hung: no submission finished in %d s, and the driver never reported the "
+                              "device lost (on Linux, dmesg or journalctl -k around this time names the fault, an Xid on NVIDIA)", still);
+                logf("vk: GPU hang: the timeline at %llu, %llu sent", (unsigned long long)done, (unsigned long long)sent);
+                device_lost(why);
             }
         }
     }).detach();
