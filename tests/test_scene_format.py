@@ -1,7 +1,7 @@
-"""With HDR set to Native the game's scene buffer is RGBA16F, not R11G11B10F; otherwise the game picks it as shipped.
+"""With HDR set to Native and the PsychoV35 tone mapper the game's scene buffer is RGBA16F, not R11G11B10F; otherwise the game picks it as shipped.
 
 nx2/oot_patches.py makes f_80672260's R11G11B10F choice (26) RGBA16F (44) while hos_scene_rgba16f is set, which host/nn_vi.c
-sets from the HDR row (HOS_OPT_HDR_NATIVE) at each present. The function is found by name alone, so only the supported build's
+sets from the tone mapper row (HOS_OPT_HDR_TONEMAP: Native HDR with PsychoV35) at each present. The function is found by name alone, so only the supported build's
 lift is patched, and a lift patched again is patched once. The lifted text here is made up in the lift's shape, not the game's.
 
 python -I -B tests/test_scene_format.py [--cc gcc]
@@ -84,8 +84,13 @@ def patch_checks():
 
 def source_checks():
     vi = (ROOT / "host" / "nn_vi.c").read_text(encoding="utf-8")
-    check("hos_scene_rgba16f = rx_option(HOS_OPT_HDR_NATIVE, 0) != 0;" in block(vi, "static void realtime_step("),
-          "the switch is not set from the HDR row at each present (off without the renderer's menu)")
+    check("hos_scene_rgba16f = rx_option(HOS_OPT_HDR_TONEMAP, 0) != 0;" in block(vi, "static void realtime_step("),
+          "the switch is not set from the tone mapper row at each present (off without the renderer's menu)")
+    replay = (ROOT / "gpu" / "vk" / "vk_replay.cpp").read_text(encoding="utf-8")
+    check("if (id == HOS_OPT_HDR_TONEMAP) return scene_tonemap_on();" in replay,
+          "the renderer does not answer the tone mapper's option with scene_tonemap_on (Native HDR on Vanilla must keep R11G11B10F)")
+    api = (ROOT / "gpu" / "vk" / "vk_api.h").read_text(encoding="utf-8")
+    check("enum { HOS_OPT_HDR_TONEMAP = 47 };" in api, "HOS_OPT_HDR_TONEMAP is not option 47")
     check("volatile int hos_scene_rgba16f = 0;" in vi, "host/nn_vi.c does not define hos_scene_rgba16f, off at start")
 
 
@@ -111,7 +116,7 @@ static uint64_t format(int rgba16f, uint64_t flags, uint64_t x23) {
 int main(void) {
     CHECK(format(0, 0, 0) == 26 && format(0, 8, 0) == 44 && format(0, 0, 1) == 44);   /* (as shipped) */
     CHECK(format(1, 0, 0) == 44 && format(1, 8, 0) == 44 && format(1, 0, 1) == 44);
-    printf("PASS: the scene buffer is RGBA16F with native HDR, the game's pick otherwise\n");
+    printf("PASS: the scene buffer is RGBA16F with the PsychoV35 tone mapper, the game's pick otherwise\n");
     return 0;
 }
 '''

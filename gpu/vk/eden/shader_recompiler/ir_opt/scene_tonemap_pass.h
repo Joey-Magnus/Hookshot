@@ -180,18 +180,24 @@ inline const char* SceneToneMapPass(IR::Program& program) {
             return "target 0's colour not under a peak of the exposure's bank";
     }
 
-    IR::Inst* first{writes[0]};
+    // (before the last of the three writes: each channel's fit, the exposure and the peak are made by then, in any order;
+    // the other two writes move down to it, after what they now write)
+    IR::Inst* last{writes[0]};
     for (IR::Inst& inst : block->Instructions())
-        if (&inst == writes[0] || &inst == writes[1] || &inst == writes[2]) {
-            first = &inst;
-            break;
-        }
-    IR::IREmitter ir{*block, block->Instructions().iterator_to(*first)};
+        if (&inst == writes[0] || &inst == writes[1] || &inst == writes[2]) last = &inst;
+    auto& list{block->Instructions()};
+    IR::IREmitter ir{*block, list.iterator_to(*last)};
     IrOps ops{ir};
     // (a peak under the paper white, or none: the game's SDR range)
     const IR::F32 safe_peak{ir.FPMax(peak, ir.Imm32(1.0f))};
     const auto out = PsychoV35::SceneToneMap(ops, scene, gain, safe_peak);
-    for (int c = 0; c < 3; c++) writes[c]->SetArg(2, out[c]);
+    for (int c = 0; c < 3; c++) {
+        if (writes[c] != last) {
+            list.erase(list.iterator_to(*writes[c]));
+            list.insert(list.iterator_to(*last), *writes[c]);
+        }
+        writes[c]->SetArg(2, out[c]);
+    }
     return nullptr;
 }
 

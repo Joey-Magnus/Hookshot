@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# The reference below is a line-by-line port of RenoDX (github.com/clshortfuse/renodx); Copyright (c) 2025 Carlos Lopez Jr.,
+# MIT: gpu/vk/eden/shader_recompiler/ir_opt/LICENSE-renodx.md
 """PsychoV35 as the scene tone map pass emits it (gpu/vk/eden/shader_recompiler/ir_opt/psychov35.h) gives what RenoDX's
 zelda-oot-oz mod gives at its defaults.
 

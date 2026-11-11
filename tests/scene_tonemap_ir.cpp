@@ -19,7 +19,7 @@ namespace PV = Shader::Optimization::PsychoV35;
 
 constexpr u32 kBank = 3, kGain = 0x38, kPeak = 0x40;
 
-enum class Shape { Game, NoLuminance, TwoExposures, GainFirst };
+enum class Shape { Game, NoLuminance, TwoExposures, GainFirst, RedFirst };
 
 struct Built {
     ObjectPool<IR::Inst> insts{256};
@@ -37,13 +37,17 @@ void build(Built& b, Shape shape) {
     const IR::F32 gain = ir.GetFloatCbuf(ir.Imm32(kBank), ir.Imm32(kGain));
     const IR::F32 other_gain = ir.GetFloatCbuf(ir.Imm32(kBank), ir.Imm32(kGain + 4));
     std::array<IR::F32, 3> fitted;
-    for (const int c : {2, 0, 1}) {   // (the fits out of the channels' order: the luminance names them)
+    // (RedFirst: red's colour written before blue's and green's fits are made, then theirs after the luminance)
+    const IR::F32 early_peak = shape == Shape::RedFirst ? ir.GetFloatCbuf(ir.Imm32(kBank), ir.Imm32(kPeak)) : IR::F32{};
+    for (const int c : shape == Shape::RedFirst ? std::array<int, 3>{0, 2, 1} : std::array<int, 3>{2, 0, 1}) {
+        // (the fits out of the channels' order: the luminance names them)
         const IR::F32 scene = ir.GetAttribute(IR::Attribute(int(IR::Attribute::Generic0X) + c));
         const IR::F32 g = shape == Shape::TwoExposures && c == 1 ? other_gain : gain;
         const IR::F32 x = shape == Shape::GainFirst ? IR::F32{ir.FPMul(g, scene)} : IR::F32{ir.FPMul(scene, g)};
         const IR::F32 num = ir.FPMul(x, ir.FPFma(x, ir.Imm32(2.51f), ir.Imm32(0.03f)));
         const IR::F32 den = ir.FPFma(x, ir.FPFma(x, ir.Imm32(2.43f), ir.Imm32(0.59f)), ir.Imm32(0.14f));
         fitted[c] = ir.FPSaturate(ir.FPMul(num, IR::F32{ir.FPRecip(den)}));
+        if (shape == Shape::RedFirst && c == 0) ir.SetFragColor(0, 0, ir.FPMin(ir.FPMax(ir.Imm32(0.0f), fitted[0]), early_peak));
     }
     IR::F32 luminance = ir.Imm32(0.0f);
     if (shape != Shape::NoLuminance)
@@ -51,13 +55,27 @@ void build(Built& b, Shape shape) {
                              ir.FPFma(fitted[0], ir.Imm32(0.29890000820159912109375f),
                                       ir.FPMul(fitted[1], ir.Imm32(0.586600005626678466796875f))));
     const IR::F32 peak = ir.GetFloatCbuf(ir.Imm32(kBank), ir.Imm32(kPeak));
-    for (u32 c = 0; c < 3; c++) {
+    for (u32 c = shape == Shape::RedFirst ? 1 : 0; c < 3; c++) {
         const IR::F32 expanded = ir.FPFma(luminance, ir.Imm32(0.25f), fitted[c]);
         ir.SetFragColor(0, c, ir.FPMin(ir.FPMax(ir.Imm32(0.0f), expanded), peak));
     }
     ir.SetFragColor(0, 3, ir.Imm32(1.0f));
     for (IR::Inst& inst : block->Instructions())
         if (inst.GetOpcode() == IR::Opcode::SetFragColor && inst.Arg(1).U32() < 3) b.writes[inst.Arg(1).U32()] = &inst;
+}
+
+/// Whether every instruction's operands are made before it in the block (the pass's insertion point dominates its uses)
+bool defined_before_use(const IR::Block& block) {
+    std::unordered_map<const IR::Inst*, size_t> at;
+    size_t i = 0;
+    for (const IR::Inst& inst : block.Instructions()) at[&inst] = i++;
+    for (const IR::Inst& inst : block.Instructions())
+        for (size_t a = 0; a < inst.NumArgs(); a++)
+            if (!inst.Arg(a).IsImmediate()) {
+                const auto it = at.find(inst.Arg(a).InstRecursive());
+                if (it == at.end() || it->second >= at[&inst]) return false;
+            }
+    return true;
 }
 
 struct Eval {
@@ -163,6 +181,17 @@ int main() {
         for (int c = 0; c < 3; c++) CHECK(std::fabs(float(e(b.writes[c]->Arg(2))) - want[c]) < 1e-5f);
         std::printf("the exposure first in the product: the same\n");
     }
+    for (const Shape shape : {Shape::Game, Shape::RedFirst}) {
+        Built b;
+        build(b, shape);
+        CHECK(Optimization::SceneToneMapPass(b.program) == nullptr);
+        CHECK(defined_before_use(*b.program.blocks[0]));
+        Eval e{{0.6f, 3.0f, 0.1f}, 1.2f, 0.0f, 6.0f, {}};
+        FloatOps o;
+        const auto want = PV::SceneToneMap(o, std::array<float, 3>{0.6f, 3.0f, 0.1f}, 1.2f, 6.0f);
+        for (int c = 0; c < 3; c++) CHECK(std::fabs(float(e(b.writes[c]->Arg(2))) - want[c]) < 1e-5f);
+    }
+    std::printf("red written before the other channels' fits: PsychoV35 made before the last write, each value before its use\n");
     for (const Shape shape : {Shape::NoLuminance, Shape::TwoExposures}) {
         Built b;
         build(b, shape);

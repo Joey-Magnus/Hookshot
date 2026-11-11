@@ -508,7 +508,7 @@ def patch_camera_speed(s):
     return s, found
 
 
-# Scene format (host/nn_vi.c hos_scene_rgba16f: the Insert menu's HDR set to Native). f_80672260 picks the format of the scene
+# Scene format (host/nn_vi.c hos_scene_rgba16f: the Insert menu's HDR set to Native with the PsychoV35 tone mapper). f_80672260 picks the format of the scene
 # buffer the game tone maps into (main+0x652340: RGBA16F, 44, under two of its flags, else R11G11B10F, 26) and makes the buffer
 # again when the one it has differs (+440). R11G11B10F has no sign and 6 bits of mantissa, so the native HDR banded; with the
 # switch on both choices are RGBA16F (RenoDX's zelda-oot-oz patch of main+0x65234C, github.com/clshortfuse/renodx, MIT).
