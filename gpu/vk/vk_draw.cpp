@@ -1152,10 +1152,14 @@ std::string pipe_notes_path() {
     return dir.substr(0, dir.find_last_of("\\/") + 1) + "hookshot_pipelines.bin";
 }
 /// The notes of this build (hookshot_pipelines.bin), each pipeline once
-/// (hookshot) Targets a pipeline can be made with: at most 8 colour targets, a sample count Vulkan has, a topology it has.
-/// The notes and the state list are files: what they say is checked before a pipeline is made from it
+/// (hookshot) Targets a pipeline can be made with: at most 8 colour targets, a sample count Vulkan has and this device draws
+/// with (a shareable list's 64 reached the driver as the pipeline's), a topology it has. The notes and the state list are
+/// files: what they say is checked before a pipeline is made from it
 bool targets_ok(uint32_t n, uint32_t samples, uint32_t topo) {
-    return n <= 8 && samples >= 1 && samples <= 64 && !(samples & (samples - 1)) && topo <= VK_PRIMITIVE_TOPOLOGY_PATCH_LIST;
+    if (!(n <= 8 && samples >= 1 && samples <= 64 && !(samples & (samples - 1)) && topo <= VK_PRIMITIVE_TOPOLOGY_PATCH_LIST))
+        return false;
+    return !dev.physical ||   // (no device to ask: the pipeline is not made either)
+           (samples & (dev.props.limits.framebufferColorSampleCounts | dev.props.limits.framebufferDepthSampleCounts)) != 0;
 }
 /// (hookshot) Formats a pipeline can be made with: each colour target's none or one this device draws to, the depth target's
 /// one it uses as depth. They come from the notes and the shareable state list, and any number reached the driver as a

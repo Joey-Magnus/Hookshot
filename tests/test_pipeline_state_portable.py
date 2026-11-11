@@ -79,7 +79,8 @@ def main():
 #define CHECK(x) do { if (!(x)) { std::fprintf(stderr, "FAIL:%d %s\n", __LINE__, #x); std::exit(1); } } while (0)
 // the made-up GPUs: A samples ASTC and has mesh shaders; B decodes ASTC and runs mesh programs as the compute fallback
 bool gpu_b = false;
-struct { void* physical = (void*)1; } dev;
+// (a device that draws with 1, 2, 4 and 8 samples: VkPhysicalDeviceLimits' framebuffer sample counts)
+struct { void* physical = (void*)1; struct { struct { uint32_t framebufferColorSampleCounts = 0xF, framebufferDepthSampleCounts = 0xF; } limits; } props; } dev;
 static void vkGetPhysicalDeviceFormatProperties(void*, VkFormat f, VkFormatProperties* p) {
     *p = {};
     const bool astc = f >= VK_FORMAT_ASTC_4x4_UNORM_BLOCK && f <= VK_FORMAT_ASTC_12x12_SRGB_BLOCK;
