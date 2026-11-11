@@ -112,6 +112,8 @@ void prepare_left_workers_note() { left_noted = true; }
 void prepare_progress_log(const char*, size_t, size_t, std::chrono::steady_clock::time_point, std::chrono::steady_clock::time_point&) {}
 void ub_thread_off() {}
 void Sleep(unsigned ms) { std::this_thread::sleep_for(std::chrono::milliseconds(ms)); }
+// (host/hos_fopen_write.h's no-link write: plain fopen here, as its windows.h would clash with this Sleep)
+static FILE* hos_fopen_write(const char* path, const char* mode) { return fopen(path, mode); }
 std::vector<std::unique_ptr<PipeNote>> pipe_notes_read() {
     std::vector<std::unique_ptr<PipeNote>> v;
     v.push_back(std::make_unique<PipeNote>(PipeNote{1, 1, 0, 3, {}}));
@@ -269,8 +271,8 @@ def compile_run(cxx, name, code, tmp):
     src.write_text(code, encoding="utf-8")
     # (-D_CRT_SECURE_NO_WARNINGS: a clang that targets MSVC's C library, CI's, calls getenv and fopen deprecated, as the game's
     # own build says too: toolchain.native_target)
-    cmd = [cxx, "-std=c++20", "-O1", "-Wall", "-Wextra", "-Werror", "-Wno-unused-function", "-D_CRT_SECURE_NO_WARNINGS",
-           "-include", str(ROOT / "host" / "hos_fopen_write.h"), str(src), "-o", str(exe)]   # (the markers: hos_fopen_write)
+    cmd = [cxx, "-std=c++20", "-O1", "-Wall", "-Wextra", "-Werror", "-Wno-unused-function", "-D_CRT_SECURE_NO_WARNINGS", str(src),
+           "-o", str(exe)]
     if os.name != "nt":
         cmd.insert(1, "-pthread")
     subprocess.run(cmd, check=True, timeout=180)
