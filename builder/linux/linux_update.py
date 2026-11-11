@@ -55,6 +55,12 @@ def data_root():
     return os.path.join(base, "hookshot", "builder")
 
 
+def tag_ok(tag):
+    """A release name (a list's tag, or --tag from the game): it names a folder under versions/ and goes into release links.
+    The same rule as Updater.cs TagOk, setup_parts.list_name_ok and host/hos_update.c safe_tag (which is stricter)"""
+    return isinstance(tag, str) and re.fullmatch(r"[0-9A-Za-z._+-]{1,128}", tag) is not None and tag not in (".", "..")
+
+
 def parse_list(text, local=True):
     """The setup list. A part owns the following tree line, or the file lines, until the next part. local: a list from
     this PC (the tools' own, HOOKSHOT_LINUX_LIST), whose parts may be file:// links; a downloaded one's are https"""
@@ -85,7 +91,7 @@ def parse_list(text, local=True):
         raise ValueError("the setup list has no release")
     # (the tag names a folder under versions/ that an update removes and remakes, and a part's names are paths in it:
     # they stay inside it)
-    if not re.fullmatch(r"[0-9A-Za-z._+-]{1,128}", tag) or tag in (".", ".."):
+    if not tag_ok(tag):
         raise ValueError("the setup list's tag is not a version name")
     for part in parts:
         if not re.fullmatch(r"[0-9a-f]{64}", part.sha) or not part.url.startswith(("https://", "file://") if local else "https://"):

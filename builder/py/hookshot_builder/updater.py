@@ -95,6 +95,9 @@ def update_folder(ui, folder, tag, fetched):
     """The game in folder built again with the latest release: here when these tools are it (or fetched), else after installing it
     (this app then starts again on it with --update folder --tag t --fetched)"""
     ui.begin_update(folder, tag)
+    if tag is not None and not setup_parts.list_name_ok(tag):   # (it goes into release links: the setup list's rule)
+        ui.download_failed("The update asked for a release name this builder does not take.")
+        return
     tools = Tools.find()
     # (just installed, but another release than asked for: GitHub's latest link lags right after a publish)
     if fetched and tag and tools and tools.version and tools.version != tag:

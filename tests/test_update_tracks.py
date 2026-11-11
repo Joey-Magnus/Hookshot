@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 RUN_ALL_ARGS = ["--cc", "gcc"]
 
@@ -196,6 +197,41 @@ class Tracks(unittest.TestCase):
         source = (ROOT / "host/hos_update.c").read_text(encoding="utf-8")
         self.assertIn("builder_ok(builder, bargs, 1)", source)   # (Windows)
         self.assertIn("builder_ok(builder, NULL, 0)", source)    # (Linux)
+
+    def test_every_builder_entry_takes_one_tag_rule(self):
+        import re
+        sys.path.insert(0, str(ROOT / "builder" / "py"))
+        from hookshot_builder import setup_parts, updater
+        cs = (ROOT / "builder/HookshotBuilder/Updater.cs").read_text(encoding="utf-8")
+        cs_rule = re.search(r'TagName = new\(@"\^(.*?)\$"\)', cs).group(1)
+        cs_ok = lambda t: re.fullmatch(cs_rule, t) is not None and t not in (".", "..")   # noqa: E731
+        good = ["v2.1.0", "v2.1.0-rc.1", "v2.1.0-rc.1-3-g1a2b3c4", "nightly", "v2.0.5-3-g1a2b3c4-dirty"]
+        bad = ["", ".", "..", "../v2", "v2/../..", "v2 --fetched", "v2\\x", "C:", "v2\n", "a" * 129, "%2e%2e", "v2?x", "v2#x"]
+        for t in good:
+            self.assertTrue(linux_update.tag_ok(t) and setup_parts.list_name_ok(t) and cs_ok(t), t)
+        for t in bad:
+            self.assertFalse(linux_update.tag_ok(t), t)
+            self.assertFalse(setup_parts.list_name_ok(t) and len(t) <= 128, t)
+            self.assertFalse(cs_ok(t), t)
+        # (Updater.cs: --tag at the start of an update, and the tags it reads from GitHub)
+        self.assertIn("if (tag != null && !TagOk(tag))", cs)
+        self.assertNotIn("return line[4..].Trim();", cs)
+        self.assertEqual(cs.count("return ListTag(line);"), 2)
+        self.assertIn('GetProperty("tag_name").GetString() is { } latest && TagOk(latest)', cs)
+        # (the Python builder refuses a bad --tag before anything is downloaded)
+        said = []
+
+        class Ui:
+            def begin_update(self, folder, tag):
+                pass
+
+            def download_failed(self, text):
+                said.append(text)
+        with mock.patch.object(updater.Tools, "find", side_effect=AssertionError("went on")):
+            updater.update_folder(Ui(), "/x", "../../x", False)
+        self.assertEqual(len(said), 1)
+        builder = (ROOT / "builder/linux/hookshot_builder.py").read_text(encoding="utf-8")
+        self.assertIn("if tag is not None and not linux_update.tag_ok(tag):", builder)
 
     def test_the_game_offers_a_release_candidate_only_a_newer_one(self):
         source = (ROOT / "host/hos_update.c").read_text(encoding="utf-8")
