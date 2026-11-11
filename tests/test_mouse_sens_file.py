@@ -30,6 +30,7 @@ FIXTURE = r'''#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include "HOS_FOPEN_READ_H"
+#include "HOOKSHOT_ENV_H"   /* (env_on) */
 static double hos_mouse_sens;
 static const char *hos_user_dir;
 static int invert = -1, sens_from_file;
@@ -59,7 +60,8 @@ def main():
     with tempfile.TemporaryDirectory(prefix="mouse-sens-") as tmp:
         tmp = Path(tmp)
         c = tmp / "f.c"
-        c.write_text((FIXTURE % fn).replace("HOS_FOPEN_READ_H", (ROOT / "host" / "hos_fopen_read.h").as_posix()),
+        c.write_text((FIXTURE % fn).replace("HOS_FOPEN_READ_H", (ROOT / "host" / "hos_fopen_read.h").as_posix())
+                     .replace("HOOKSHOT_ENV_H", (ROOT / "gpu" / "vk" / "compat" / "hookshot_env.h").as_posix()),
                      encoding="utf-8")
         exe = tmp / ("f.exe" if sys.platform == "win32" else "f")
         subprocess.run([a.cc, "-std=c11", "-D_POSIX_C_SOURCE=200809L", "-Wall", "-Wno-unused-function", str(c), "-o",

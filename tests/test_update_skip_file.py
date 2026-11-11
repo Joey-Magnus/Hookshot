@@ -1,7 +1,8 @@
 """The update offer's "Skip this version" (host/hos_update.c write_skip, compiled here from its own text) writes
-<game>/user/hookshot_update_skip.txt only into a real user folder and never through a symbolic link: a link put in the
-file's place, or a user folder that is a link, leaves what it points to as it was. Windows refuses symbolic links
-and junctions in the same place (checked by its text here).
+<saves folder>/hookshot_update_skip.txt (hos_user_dir) only as a plain file and never through a symbolic link at its
+name: a link put in the file's place leaves what it points to as it was. A saves folder that is itself a link (kept
+elsewhere by the player) still takes the file. Windows refuses symbolic links and junctions at <game>\\user and the
+file (checked by its text here).
 
 python -I -B tests/test_update_skip_file.py [--cc gcc]
 """
@@ -23,9 +24,14 @@ FIXTURE = r"""
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#define MAX_PATH 260
+static const char *hos_user_dir;
 /* WRITE_SKIP */
-int main(int argc, char **argv) { return argc == 3 && write_skip(argv[1], argv[2]) ? 0 : 1; }
+int main(int argc, char **argv) {
+    if (argc != 3) return 1;
+    char path[4096];
+    snprintf(path, sizeof path, "%s/hookshot_update_skip.txt", hos_user_dir = argv[1]);
+    return write_skip(path, argv[2]) ? 0 : 1;
+}
 """
 
 
@@ -59,45 +65,43 @@ def main():
         (t / "t.c").write_text(FIXTURE.replace("/* WRITE_SKIP */", block(source, "static int write_skip(")), encoding="utf-8")
         exe = str(t / "t")
         subprocess.run([a.cc, "-std=gnu11", "-Wall", "-Wextra", "-Werror", str(t / "t.c"), "-o", exe], check=True)
-        run = lambda game: subprocess.run([exe, str(game) + "/", "v2.1.0"]).returncode   # noqa: E731
+        run = lambda saves: subprocess.run([exe, str(saves), "v2.1.0"]).returncode   # noqa: E731
 
-        # an ordinary folder: the file is written (and the user folder made)
-        game = t / "game"
-        game.mkdir()
-        assert run(game) == 0
-        assert (game / "user/hookshot_update_skip.txt").read_text() == "skip=v2.1.0\n"
-        assert run(game) == 0   # (again: replaced)
-        assert (game / "user/hookshot_update_skip.txt").read_text() == "skip=v2.1.0\n"
+        # an ordinary saves folder: the file is written (and the folder made)
+        saves = t / "saves"
+        assert run(saves) == 0
+        assert (saves / "hookshot_update_skip.txt").read_text() == "skip=v2.1.0\n"
+        assert run(saves) == 0   # (again: replaced)
+        assert (saves / "hookshot_update_skip.txt").read_text() == "skip=v2.1.0\n"
 
         # the file is a link: the target stays as it was
         target = t / "precious.txt"
         target.write_text("keep me\n")
-        (game / "user/hookshot_update_skip.txt").unlink()
-        (game / "user/hookshot_update_skip.txt").symlink_to(target)
-        assert run(game) != 0
+        (saves / "hookshot_update_skip.txt").unlink()
+        (saves / "hookshot_update_skip.txt").symlink_to(target)
+        assert run(saves) != 0
         assert target.read_text() == "keep me\n"
         # (a dangling link: nothing is made where it points)
-        (game / "user/hookshot_update_skip.txt").unlink()
-        (game / "user/hookshot_update_skip.txt").symlink_to(t / "made.txt")
-        assert run(game) != 0
+        (saves / "hookshot_update_skip.txt").unlink()
+        (saves / "hookshot_update_skip.txt").symlink_to(t / "made.txt")
+        assert run(saves) != 0
         assert not (t / "made.txt").exists()
 
-        # the user folder is a link to another folder: nothing is written there
-        game2 = t / "game2"
-        game2.mkdir()
+        # the saves folder is a link to another folder (kept elsewhere): the file is written there
         elsewhere = t / "elsewhere"
         elsewhere.mkdir()
-        (elsewhere / "hookshot_update_skip.txt").write_text("keep me\n")
-        (game2 / "user").symlink_to(elsewhere)
-        assert run(game2) != 0
-        assert (elsewhere / "hookshot_update_skip.txt").read_text() == "keep me\n"
+        (t / "saves2").symlink_to(elsewhere)
+        assert run(t / "saves2") == 0
+        assert (elsewhere / "hookshot_update_skip.txt").read_text() == "skip=v2.1.0\n"
 
-        # a folder in the file's place: refused, left alone
-        game3 = t / "game3"
-        (game3 / "user/hookshot_update_skip.txt").mkdir(parents=True)
-        assert run(game3) != 0
-        assert (game3 / "user/hookshot_update_skip.txt").is_dir()
-    print("OK: the skip file is written only as a plain file in a real user folder")
+        # a file where the saves folder should be, or a folder in the file's place: refused, left alone
+        (t / "saves3").write_text("keep me\n")
+        assert run(t / "saves3") != 0
+        assert (t / "saves3").read_text() == "keep me\n"
+        (t / "saves4/hookshot_update_skip.txt").mkdir(parents=True)
+        assert run(t / "saves4") != 0
+        assert (t / "saves4/hookshot_update_skip.txt").is_dir()
+    print("OK: the skip file is written only as a plain file in the saves folder")
     return 0
 
 

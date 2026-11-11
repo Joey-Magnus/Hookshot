@@ -378,6 +378,13 @@ const char *hos_env_file_names(void);   /* (host/hos_main.c: what hookshot_env.t
 /* (the same offer as Windows, when the player started bin/hookshot itself. The launcher sets HOOKSHOT_NO_UPDATE_CHECK
    and asks in its own window. curl and zenity do the network and the question; without either, the game just starts) */
 
+/* "Skip this version" is kept with the saves, where they are (hos_main.c sets it first: $XDG_DATA_HOME/hookshot, or
+   --user's folder). It was written to user/ beside the game, as on Windows, where Linux keeps no saves any more: the
+   start's move of an old user/ folder (saves_dir) took the file for one, moved it to the saves' place and wrote
+   saves-moved.txt, so the next start asked again. Skipped again, the file was in both places, which the move reads as
+   saves it cannot move: the game then ran on the empty user/ beside it and showed no saves. */
+extern const char *hos_user_dir;
+
 static int read_value(const char *path, const char *name, char *out, size_t cap) {
     FILE *f = fopen(path, "rb");
     if (!f) return 0;
@@ -456,15 +463,13 @@ static int installed_builder(char *out, size_t cap) {
     return access(out, X_OK) == 0;
 }
 
-/* (hookshot) "Skip this version": <dir>user/hookshot_update_skip.txt, written only into a real user folder and never
-   through a link (the folder or the file put there as a symbolic link would have the write truncate what it points to) */
-static int write_skip(const char *dir, const char *tag) {
-    char path[MAX_PATH + 64];
+/* (hookshot) "Skip this version": <hos_user_dir>/hookshot_update_skip.txt, never written through a link at the file's
+   name (a symbolic link put there would have the write truncate what it points to). The saves folder itself may be a
+   link: a player can keep it elsewhere */
+static int write_skip(const char *path, const char *tag) {
     struct stat st;
-    snprintf(path, sizeof path, "%suser", dir);
-    mkdir(path, 0755);
-    if (lstat(path, &st) != 0 || !S_ISDIR(st.st_mode)) return 0;
-    snprintf(path, sizeof path, "%suser/hookshot_update_skip.txt", dir);
+    mkdir(hos_user_dir, 0755);
+    if (stat(hos_user_dir, &st) != 0 || !S_ISDIR(st.st_mode)) return 0;
     const int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK, 0644);
     if (fd < 0) return 0;
     if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) return close(fd), 0;
@@ -489,8 +494,9 @@ void hos_update_check(void) {
     dir[n] = 0;
     snprintf(path, sizeof path, "%shookshot_version.txt", dir);
     if (!read_value(path, "version", have, sizeof have) || !safe_tag(have)) return;
-    snprintf(path, sizeof path, "%suser/hookshot_update_skip.txt", dir);
-    read_value(path, "skip", skipped, sizeof skipped);
+    char skip[MAX_PATH + 64];
+    snprintf(skip, sizeof skip, "%s/hookshot_update_skip.txt", hos_user_dir);
+    read_value(skip, "skip", skipped, sizeof skipped);
     if (!latest_tag(have, tag, sizeof tag)) {
         fprintf(stderr, "update: the latest release could not be asked for (offline?)\n");
         return;
@@ -516,7 +522,7 @@ void hos_update_check(void) {
     if (!fgets(answer, sizeof answer, pick)) answer[0] = 0;
     pclose(pick);
     if (!strncmp(answer, "Skip", 4)) {
-        write_skip(dir, tag);
+        write_skip(skip, tag);
         return;
     }
     if (strncmp(answer, "Update", 6)) return;
