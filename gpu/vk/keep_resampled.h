@@ -14,10 +14,9 @@ namespace keep_resampled {
 // rendered, not uploaded, and sampled EMPTY until the game drew it again some 40 frames later (Dodongo's Cavern at a 512 MB
 // budget, issue 2209's dark ground in Hyrule Field).
 //
-// Only while used in the last kMaxUnused presents (unused for fewer): one from an area left behind goes as before (the same 1,800 presents after
-// which the compaction's reserve lets a long-unused texture go, #2198). The 12288 x 12288 map went unused 400 presents before
-// the eviction took it
-// the compaction's reserve's own line, so a texture this rule keeps is never one the reserve may take (unused 1,800 or more)
+// Only while used in the last kMaxUnused presents (unused for fewer), the compaction reserve's own line (#2198): one from an
+// area left behind goes as before, and a texture this rule keeps is never one the reserve may take. The 12288 x 12288 map went
+// unused 400 presents before the eviction took it.
 constexpr uint64_t kMaxUnused = vram_compact::kReserveUnused;
 inline bool recent(uint64_t unused) { return unused < kMaxUnused; }
 inline bool candidate(bool overwritten, bool gpu_written, bool resampled, uint64_t unused) {

@@ -4151,7 +4151,8 @@ void texture_frame(uint64_t completed) {
     uint64_t resampled_total = 0;
     if (keep_resampled_max)
         for (auto& [last, tex] : order)
-            if (keep_resampled::candidate(drawn_over_shifted(tex) || drawn_over(tex), tex->gpu_written, tex->resampled, frame_no - last))
+            if (tex->resampled && tex->gpu_written && keep_resampled::recent(frame_no - last) &&
+                keep_resampled::candidate(drawn_over_shifted(tex) || drawn_over(tex), tex->gpu_written, tex->resampled, frame_no - last))
                 resampled_total += tex->bytes;
     size_t finalized_kept_n = 0;
     if (keep_finalized_max)
