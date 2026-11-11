@@ -155,6 +155,7 @@ The upscalers themselves are described in [upscaling](../user/upscaling.md). The
 | `RX_VK_DLSS_DEBUG` | `motion`, `alternate` | `motion` shows the motion vectors; `alternate` the game's own upscale every other frame. Applies to DLSS, FSR 4 and FSR 3.1 on the chain |
 | `RX_VK_REFLEX` | `0`, `1`, `2`, `-` | **Player.** NVIDIA Reflex for this run: Off, On, On + Boost. `-`: its extensions are not even enabled |
 | `RX_VK_REFLEX_LOG` | `1` | With Reflex on, the driver's own latency timings averaged in the log every 300 frames |
+| `RX_VK_REFLEX_SUBMIT_IDS` | `0` | Sends the queue submits without their game frame (`VkLatencySubmissionPresentIdNV`, `gpu/vk/vk_reflex.cpp`), for comparisons. With frame generation, Reflex's "to the GPU's end" timing then goes wrong by hundreds of ms |
 | `RX_VK_ANTILAG` | `0`, `1`, `-` | **Player.** AMD Anti-Lag 2 for this run. `-`: its extension is not even enabled |
 
 ## Video memory
@@ -185,6 +186,7 @@ The upscalers themselves are described in [upscaling](../user/upscaling.md). The
 | `RX_VK_GM_LOOP` | `0`, `1` | How a global memory access's storage-buffer tables are searched: in a loop (`1`) or written out entry by entry (`0`). On by default on Intel, whose compiler didn't finish the culling programs with the entries written out |
 | `RX_VK_MESH_NOCULL` | key prefixes | **Player.** Turns off culling in the task shaders whose native code key starts with one of the prefixes: every meshlet is drawn and the rasterizer clips what is off screen. On a Steam Deck, `2c56dc1006942f74` avoids the GPU hang in Kokiri Forest and the Great Deku Tree without leaving anything out. It costs some GPU time, so it is off unless set. The log says "culling off, every meshlet drawn" for each task shader it changed |
 | `RX_VK_SKIP_CODE` | key prefixes | **Player.** Leaves out the draws of every program with a stage whose native code key starts with one of the prefixes (the keys the log prints after "its code:"). A workaround: on a Steam Deck `2c56dc1006942f74` also avoids the hang, but the models those task + mesh programs draw are missing. Prefer `RX_VK_MESH_NOCULL` |
+| `RX_VK_FALLBACK_PHI_LIMIT` | `<n>` | RADV on GCN 1-4 cards (RX 400/500, R9 2xx/3xx/Fury): a mesh-fallback compute stage with more than this many phis isn't built and its draws are left out (default 50000; `0`: no limit; the limit in use is logged). That compiler didn't finish the two biggest mesh programs (`gpu/vk/fallback_size_policy.h`) |
 | `RX_VK_TASK_MESH_FALLBACK` | `0`, `1` | **Player.** Task + mesh draws through the compute fallback (`1`) or the driver's mesh shaders (`0`). Default: the fallback on AMD Navi 21 and Navi 22 on Windows (RX 6800, 6800 XT, 6900 XT, 6950 XT, 6700 XT), where the native path times out the driver; the Mesh shaders row's Native turns it off |
 | `RX_VK_ROBUST` | `0`, `1` | **Player.** Bounds-checked buffer access off or on for this run, over the Robust buffers row (default on) |
 | `RX_VK_SAMPLER_CACHE` | `0`, `1` | **Player.** The sampler cache off or on, over the Sampler cache row |
