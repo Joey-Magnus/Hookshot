@@ -211,12 +211,14 @@ static void mouse_setup(void) {   /* (once: the sensitivity kept in <user>/mouse
         FILE *f = hos_fopen_read(path);
         if (f) {
             double v;
-            if (fscanf(f, "%lf", &v) == 1 && v > 0) hos_mouse_sens = v;
+            /* (hookshot) only a finite value, kept to the menu's 10-500%: "inf" or "1e999" went on into lround() and the
+               menu's option as an undefined number */
+            if (fscanf(f, "%lf", &v) == 1 && isfinite(v) && v > 0) hos_mouse_sens = v < 0.1 ? 0.1 : v > 5 ? 5 : v;
             fclose(f);
             sens_from_file = 1;
         }
         const char *e = getenv("HOS_MOUSE_SENS");
-        if (e && atof(e) > 0) hos_mouse_sens = atof(e);
+        if (e && isfinite(atof(e)) && atof(e) > 0) hos_mouse_sens = atof(e) < 0.1 ? 0.1 : atof(e) > 5 ? 5 : atof(e);
     }
 }
 
