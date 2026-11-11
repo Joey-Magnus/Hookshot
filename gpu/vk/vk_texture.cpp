@@ -51,6 +51,7 @@
 #include "astc_bc_policy.h"
 #include "vram_compact.h"
 #include "keep_rendered.h"
+#include "keep_resampled.h"
 #include "target_overlap.h"
 #include "host_shaders/block_linear_unswizzle_2d_comp_spv.h"
 #ifndef HOOKSHOT_ENV_H   // (env_on: the switches' one rule)
@@ -2471,6 +2472,10 @@ Texture* texture_touch(Texture* tex, bool for_sampling) {
     // GPU's texels, and a write before (another variable in the same page) re-uploaded garbage over a drawn LUT:
     // the rainbow sky)
     const uint32_t since = tex->gpu_written && tex->released ? std::max(tex->upload_gen, tex->release_gen) : tex->upload_gen;
+    // (hookshot) one the game finalized and samples after that: a cache it keeps (the shadow map it draws, finalizes and samples
+    // for hundreds of frames). The eviction pass keeps it over the budget: keep_resampled.h. Not only "well after it was drawn":
+    // the 12288 x 12288 shadow map was sampled within a few frames of being drawn, then went unused 400 frames and was evicted
+    if (tex->gpu_written && tex->released) tex->resampled = true;
     if (tex->gpu_written && tex->released && frame_no > tex->last_written + 60) {
         // (hookshot: one the game finalized, sampled again well after it was drawn: what the eviction keeps them for)
         static std::unordered_set<uint32_t> told;
@@ -4113,6 +4118,11 @@ void texture_frame(uint64_t completed) {
         return !drawn_over(tex) && !drawn_over_shifted(tex);
     };
     uint64_t finalized_kept = 0;
+    // (hookshot) the textures the GPU drew that the game samples again after finalizing them, kept over the budget up to
+    // RX_VK_KEEP_RESAMPLED_MB (1024 by default; 0: evicted as before): keep_resampled.h
+    static const uint64_t keep_resampled_max =
+        (uint64_t)(getenv("RX_VK_KEEP_RESAMPLED_MB") ? std::max(0, atoi(getenv("RX_VK_KEEP_RESAMPLED_MB"))) : 1024) << 20;
+    uint64_t resampled_kept = 0;
     size_t finalized_kept_n = 0;
     if (keep_finalized_max)
         for (auto& [last, tex] : order)
@@ -4162,6 +4172,15 @@ void texture_frame(uint64_t completed) {
         static const bool keep_over_only = env_on("RX_VK_KEEP_RENDERED_OVER");
         const uint64_t keep_rendered = keep_rendered::presents(known, used, allowed, keep_over_only);
         const bool overwritten = shifted || drawn_over(tex);   // (above)
+        if (keep_resampled::keep(overwritten, tex->gpu_written, tex->resampled, tex->bytes, resampled_kept, keep_resampled_max)) {
+            static int logged;
+            if (logged++ < 20)
+                logf("vk: texture #%u %#llx %ux%u NVN %#x (%llu MB) the GPU drew and the game samples again after finalizing it: kept, "
+                     "not evicted (%llu MB kept so far this pass; RX_VK_KEEP_RESAMPLED_MB=0: evicted)", tex->id,
+                     (unsigned long long)tex->gpu, tex->width, tex->height, tex->nvn_format, (unsigned long long)(tex->bytes >> 20),
+                     (unsigned long long)(resampled_kept >> 20));
+            continue;
+        }
         if (finalized_kept && keep_finalized(tex)) {   // (above. Oldest first: beyond the cap the least recently used go)
             if (finalized_kept <= keep_finalized_max) continue;
             finalized_kept -= tex->bytes;
