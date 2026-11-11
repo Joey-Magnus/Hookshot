@@ -95,7 +95,7 @@ scripts/linux/appimage.sh   # the AppImage, in build-linux/
 ```
 
 The AppImage needs glibc 2.35 or newer and a Vulkan 1.3 driver with mesh shaders. `HOOKSHOT_JOBS` sets how many files
-compile at once. The README's [Linux section](readme.md#on-linux) has the details and the runtime paths.
+compile at once. The [Linux install steps](docs/user/install.md#linux) have the details.
 
 ### NVIDIA DLSS (optional)
 
