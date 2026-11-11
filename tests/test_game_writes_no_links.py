@@ -198,7 +198,15 @@ def main():
         os.symlink(files / "target", files / "hookshot_options.ini")
         os.symlink(files / "made_by_the_link", files / "language.txt")
         os.mkfifo(files / "fifo")
-        subprocess.run([str(exe), str(files)], check=True, timeout=30)
+        r = subprocess.run([str(exe), str(files)], capture_output=True, text=True, timeout=30)
+        print(r.stdout, end="")
+        if r.returncode:
+            sys.exit(r.stdout + r.stderr)
+        # (a refusal is said in the log, once, naming the file)
+        said = [l for l in r.stderr.splitlines() if "the game does not write through it" in l]
+        if len(said) != 1 or "hookshot_options.ini" not in said[0]:
+            sys.exit("hos_fopen_write: a refusal is not said once in the log: %r" % r.stderr)
+        print("PASS: a refused write is said once in the log, with the file's name")
         check_windows(a.cc, tmp)
 
 

@@ -8,6 +8,7 @@
 #pragma once
 #include <stdio.h>
 #include "hos_fopen_read.h"   /* (and the reads: hos_fopen_read, hos_fopen_read_binary) */
+#include <errno.h>
 #ifdef _WIN32
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -19,6 +20,11 @@
 #include <unistd.h>
 #endif
 
+/* (a refusal is said once per file that includes this, on stderr (the game's log): a setting that "does not stick" has a reason) */
+static inline void hos_fopen_write_refused(const char *path) {
+    static int said;
+    if (!said++) fprintf(stderr, "files: %s is a link or not a plain file: the game does not write through it\n", path);
+}
 static inline FILE *hos_fopen_write(const char *path, const char *mode) {
 #ifdef _WIN32
     if (mode[0] != 'w' && mode[0] != 'a') return NULL;
@@ -28,18 +34,25 @@ static inline FILE *hos_fopen_write(const char *path, const char *mode) {
         const HANDLE h = FindFirstFileA(path, &fd);
         if (h == INVALID_HANDLE_VALUE) return NULL;
         FindClose(h);
-        if (fd.dwReserved0 == 0xA000000CUL || fd.dwReserved0 == 0xA0000003UL || fd.dwReserved0 == 0xA000001DUL)
+        if (fd.dwReserved0 == 0xA000000CUL || fd.dwReserved0 == 0xA0000003UL || fd.dwReserved0 == 0xA000001DUL) {
+            hos_fopen_write_refused(path);
             return NULL;   /* (IO_REPARSE_TAG_SYMLINK, _MOUNT_POINT, WSL's _LX_SYMLINK) */
+        }
     }
     return fopen(path, mode);
 #else
     const int append = mode[0] == 'a';
     if (!append && mode[0] != 'w') return NULL;
     const int fd = open(path, O_WRONLY | O_CREAT | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK | (append ? O_APPEND : 0), 0666);
-    if (fd < 0) return NULL;
+    if (fd < 0) {
+        if (errno == ELOOP || errno == ENXIO) hos_fopen_write_refused(path);   /* (a link; a FIFO with no reader) */
+        return NULL;
+    }
     struct stat st;
     /* (truncated only once it is known to be a regular file of its own name) */
-    if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode) || (!append && ftruncate(fd, 0) != 0)) {
+    const int plain = fstat(fd, &st) == 0 && S_ISREG(st.st_mode);
+    if (!plain || (!append && ftruncate(fd, 0) != 0)) {
+        if (!plain) hos_fopen_write_refused(path);
         close(fd);
         return NULL;
     }
