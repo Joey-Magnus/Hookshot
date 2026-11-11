@@ -281,6 +281,10 @@ static int copy_tree(const char *from, const char *to) {
     if (h != INVALID_HANDLE_VALUE) {
         do {
             if (!strcmp(fd.cFileName, ".") || !strcmp(fd.cFileName, "..")) continue;
+            if (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {   /* (hookshot) a link is not followed, and */
+                ok = 0;   /* (not left out either: the copy fails, and the entry stays where it is, link and all) */
+                break;
+            }
             char a[MAX_PATH], b[MAX_PATH];
             snprintf(a, sizeof a, "%s" SEP_S "%s", from, fd.cFileName);
             snprintf(b, sizeof b, "%s" SEP_S "%s", to, fd.cFileName);
@@ -304,6 +308,10 @@ static void delete_tree(const char *p) {
             if (!strcmp(fd.cFileName, ".") || !strcmp(fd.cFileName, "..")) continue;
             char a[MAX_PATH];
             snprintf(a, sizeof a, "%s" SEP_S "%s", p, fd.cFileName);
+            if (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {   /* (hookshot) the link goes, never what it names */
+                DeleteFileA(a);
+                continue;
+            }
             delete_tree(a);
         } while (FindNextFileA(h, &fd));
         FindClose(h);
@@ -334,6 +342,17 @@ static const char *saves_dir(const char *beside) {
         char from[MAX_PATH], to[MAX_PATH];
         snprintf(from, sizeof from, "%s" SEP_S "%s", beside, fd.cFileName);
         snprintf(to, sizeof to, "%s" SEP_S "%s", dir, fd.cFileName);
+        /* (hookshot) a link (a player's save folder kept elsewhere) is moved as the link it is, or not at all: never
+           copied through, which put the files it pointed to (anywhere) in among the saves */
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+            /* (a relative link would name something else from its new place: only one by a full path is moved) */
+            char target[8];
+            const ssize_t tn = readlink(from, target, sizeof target);
+            if (tn > 0 && target[0] == '/' && GetFileAttributesA(to) == INVALID_FILE_ATTRIBUTES && MoveFileExA(from, to, 0))
+                moved++;
+            else kept++, hos_log("saves: %s is a link and could not be moved: the saves stay where they are", from);
+            continue;
+        }
         if (GetFileAttributesA(to) != INVALID_FILE_ATTRIBUTES) kept++;
         else if (MoveFileExA(from, to, 0)) moved++;
         else if (copy_tree(from, to)) delete_tree(from), moved++;
