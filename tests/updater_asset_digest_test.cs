@@ -315,6 +315,14 @@ namespace DigestFixture
                 var content = new StreamContent(new Bytes(s.Good, () => throw new IOException("authored stream failure")));
                 Check(await Rejects<HttpRequestException>(() => Once(s, content, s.Good.Length, CancellationToken.None)), "Stream failure changed."); s.NoPartial();
             });
+            await Case("longer-than-its-size", async s =>
+            {
+                // (no Content-Length, more bytes than the release's size: the download stops there, not at the end)
+                var stream = new Bytes(s.Good.Concat(new byte[4096]).ToArray());
+                var content = new StreamContent(stream);
+                Check(await Rejects<InvalidDataException>(() => Once(s, content, s.Good.Length, CancellationToken.None)), "Overlong download accepted.");
+                Check(stream.Position <= s.Good.Length + 3, "Overlong download read to its end."); s.NoPartial();
+            });
             await Case("midstream-cancel", async s =>
             {
                 var content = new StreamContent(new Bytes(s.Good, () => s.Cancel.Cancel()));

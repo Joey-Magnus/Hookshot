@@ -433,6 +433,9 @@ static class Updater
             if (!response.IsSuccessStatusCode) throw HttpFailure(response);
 
             var total = response.Content.Headers.ContentLength ?? size;
+            // (hookshot) never more than GitHub's size of the file, or the answer's own length: a body with no
+            // Content-Length was written to disk to its end before its length was compared
+            var limit = size > 0 ? size : total;
             await using (var from = await response.Content.ReadAsStreamAsync(token))
             await using (var to = new FileStream(partial, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             {
@@ -447,6 +450,8 @@ static class Updater
                     try { n = await from.ReadAsync(buffer, token); }
                     catch (IOException e) { throw new HttpRequestException("The download connection ended unexpectedly.", e); }
                     if (n == 0) break;
+                    if (limit > 0 && have + n > limit)
+                        throw new InvalidDataException($"The download is longer than the release says ({limit >> 20} MB).");
                     await to.WriteAsync(buffer.AsMemory(0, n), token);
                     hash.AppendData(buffer, 0, n);
                     have += n;
