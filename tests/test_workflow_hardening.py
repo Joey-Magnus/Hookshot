@@ -85,6 +85,19 @@ class WorkflowHardening(unittest.TestCase):
         found = [p for f in files for p in problems(f)]
         self.assertEqual(found, [], "\n".join(found))
 
+    def test_dependabot_proposes_the_pinned_packages_after_a_cooldown(self):
+        text = (ROOT / ".github" / "dependabot.yml").read_text(encoding="utf-8")
+        entries = re.split(r"\n  - package-ecosystem: ", text)[1:]
+        kinds = {e.split("\n", 1)[0].strip(): e for e in entries}
+        self.assertIn("github-actions", kinds)
+        self.assertIn("pip", kinds, "the pinned Python packages (requirements.txt) have no Dependabot entry")
+        self.assertIn("/nx2", kinds["pip"], "nx2/prompt_requirements.txt is not watched")
+        for kind, e in kinds.items():
+            self.assertRegex(e, r"cooldown:\s*\n\s*default-days: [1-9]", kind + ": no cooldown")
+        csproj = "".join(p.read_text(encoding="utf-8") for p in (ROOT / "builder").rglob("*.csproj"))
+        if "<PackageReference" in csproj:
+            self.assertIn("nuget", kinds, "the builder has NuGet packages and no Dependabot entry for them")
+
     def test_the_check_finds_each_kind(self):
         bad = """on:
   pull_request_target:
