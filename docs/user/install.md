@@ -60,6 +60,12 @@ nothing else to install.
 From then on, start the game from the Hookshot shortcut or `hookshot.exe` in the game folder. That's the launcher:
 it has **Play**, and **Update** when there's a new version.
 
+**Portable install.** To keep the builder, its downloads and the game together in one folder (on a USB drive or a
+second SSD, say), put `HookshotBuilder.exe` in that folder and run it from a terminal as
+`.\HookshotBuilder.exe --portable`. The game goes in `Hookshot` beside the builder's folder; keep both on the same
+drive. Shortcuts start unticked in this mode. Details are in the
+[developer guide](../dev/portable-builder.md).
+
 ## Linux
 
 1. Download `Hookshot-<version>-x86_64.AppImage` from the

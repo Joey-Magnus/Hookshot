@@ -1,8 +1,9 @@
 # What a Windows player downloads, made without game data: HookshotBuilder-Setup.exe (builder/setup/setup.c, with
-# llvm-mingw) and the Hookshot Builder package (dotnet publish, versioned from the tag as docs/versioning.md says), split
-# into the parts the setup downloads by scripts/make_setup_parts.py. The Python, emsdk, CPM and wgpu-native parts, and the
-# third_party part's prebuilt files, are the latest release's (scripts/release_parts.py). The Windows Vulkan back end is
-# compiled too, with the same llvm-mingw: players build it on their PC, this only checks that it still builds.
+# llvm-mingw) and the Hookshot Builder package (dotnet publish, versioned from the tag as docs/dev/releasing.md says),
+# split into the parts the setup downloads by scripts/make_setup_parts.py. The Python, emsdk, CPM and wgpu-native parts,
+# and the third_party part's prebuilt files, are the latest release's (scripts/release_parts.py). The Windows Vulkan
+# back end is compiled too, with the same llvm-mingw: players build it on their PC, this only checks that it still
+# builds.
 # A workflow artifact on every run; for a release, the new parts go to the builder-parts release and the setup
 # (HookshotBuilder.exe) and its list (hookshot-setup.txt) to the release, beside the Linux AppImage. A release is a tag
 # pushed by hand, or the tag the Release workflow passes when it calls this one (inputs.tag). On any other push to main,

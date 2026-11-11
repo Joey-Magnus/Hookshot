@@ -1089,7 +1089,7 @@ Each row is priced from these runs: **cost** is the on-CPU time of every sample 
    python -I scripts/cpu_report.py <sampled run>... --measured <unsampled run>... --calls <counter run> \
        --maps <maps folder> --readobj <llvm-readobj> --hashes <sha256 list of the binaries> \
        --machine "<CPU, RAM, OS, driver version>" [--menu "<Insert-menu options the runs used>"] --title "<scene>" \
-       --into docs/cpu-profile.md --section <scene key>
+       --into docs/dev/cpu-profile.md --section <scene key>
    ```
 
    `--readobj` names Windows' system DLL exports. The script reads Windows captures with lld-link maps only; a Linux capture (`hookshot`, `hookshot_vk.so`) is refused with a message, not mislabelled.

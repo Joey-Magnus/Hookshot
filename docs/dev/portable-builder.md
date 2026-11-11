@@ -17,7 +17,7 @@ Builder, and paths selected on the same volume are saved relative to the Builder
 absolute and may need selecting again after moving. Desktop and Start menu shortcuts start unchecked in portable
 mode; selecting them explicitly creates shortcuts on that PC.
 
-![Portable destination and build-files folders, shown in an isolated layout check](images/windows-portable-folders.png)
+![Portable destination and build-files folders, shown in an isolated layout check](../images/dev-windows-portable-folders.png)
 
 The original setup can be opened again without the flag while its marked data folder is beside it. The installed
 Builder also discovers its marked home when opened directly. Updates, repair and the older ZIP update fallback use
@@ -48,4 +48,4 @@ ordinary drive/UNC directory and fit the native setup's Windows path limits. Do 
 namespace paths or a volume root as a substitute. Portable support described here is Windows-only.
 
 Never share a built game folder, extracted files, saves, caches or downloaded SDK packages. The contribution rules
-in [CONTRIBUTING](../CONTRIBUTING.md) apply equally to portable installations.
+in [CONTRIBUTING](../../CONTRIBUTING.md) apply equally to portable installations.

@@ -77,10 +77,8 @@ The full steps and the system requirements are in the [install guide](docs/user/
 
 **Developing**
 
+- [Developer documentation](docs/dev/README.md): building, running, switches, architecture, testing, releasing
 - [Contributing](CONTRIBUTING.md)
-- [Building from source](docs/dev/building.md)
-- [Running the game from the command line](docs/dev/running.md)
-- [Development guide](docs/development.md) and [design notes](docs/design.md)
 
 ## How it works
 
@@ -90,7 +88,7 @@ The full steps and the system requirements are in the [install guide](docs/user/
 4. Switch 2 Ampere shaders are lowered to Maxwell (`lower_to_maxwell.h`) and translated to SPIR-V by Eden's shader
    recompiler.
 
-More detail is in the [development guide](docs/development.md) and the [design notes](docs/design.md).
+More detail is in the [architecture guide](docs/dev/architecture.md).
 
 ## Want to help?
 

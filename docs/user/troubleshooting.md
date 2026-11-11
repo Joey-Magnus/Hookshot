@@ -189,4 +189,4 @@ starting with `RX_`, `HOS_`, `HOOKSHOT_`, `EDEN_`, `NVN_` or `SDL_`) and no file
 out, and the log says so. To undo a setting, delete its line.
 
 Most settings have a row in the [in-game menu](settings.md), which is the easier way to change them. The full list of
-switches is in the [developer guide](../development.md).
+switches is in the [switch reference](../dev/switches.md).
