@@ -18,6 +18,69 @@ static int safe_tag(const char *s) {
     return 1;
 }
 
+/* (hookshot) the builder= and builder_args= lines of hookshot_version.txt name the program the game starts to update and
+   its first arguments. They are a file of the game folder, so they are taken only in the shapes the builders write
+   (nx2/make_game.py from HOOKSHOT_BUILDER_EXE / _ARGS): an absolute path to HookshotBuilder.exe, or to the Python builder's
+   python(w).exe with "-I <its hookshot_builder_start.py>" (builder/py/hookshot_builder/core.py), on Windows; to an
+   AppImage or the AppImage's AppRun on Linux. Anything else counts as no builder (the offer opens the download page). The
+   folder may be anywhere: the shape is checked, not the place */
+static int ends_with_nocase(const char *s, size_t n, const char *end) {
+    const size_t e = strlen(end);
+    if (n < e) return 0;
+    for (size_t i = 0; i < e; i++)
+        if (tolower((unsigned char)s[n - e + i]) != tolower((unsigned char)end[i])) return 0;
+    return 1;
+}
+
+/* an absolute path of n bytes: C:\ or C:/ (no network path) on Windows, / on Linux; no . or .. part, no control
+   character, no quote */
+static int builder_path_ok(const char *p, size_t n, int windows) {
+    if (windows ? !(n > 3 && isalpha((unsigned char)p[0]) && p[1] == ':' && (p[2] == '\\' || p[2] == '/'))
+                : !(n > 1 && p[0] == '/'))
+        return 0;
+    for (size_t i = 0; i < n; i++) {
+        const unsigned char c = (unsigned char)p[i];
+        if (c < 0x20 || c == 0x7f || c == '"') return 0;
+        if (windows && strchr("<>|?*", c)) return 0;
+        if (windows && c == ':' && i != 1) return 0;
+        const int sep = c == '/' || (windows && c == '\\');
+        if (sep || i == 0) {
+            size_t a = sep ? i + 1 : i, b = a;
+            while (b < n && p[b] != '/' && !(windows && p[b] == '\\')) b++;
+            if ((b - a == 1 && p[a] == '.') || (b - a == 2 && p[a] == '.' && p[a + 1] == '.')) return 0;
+        }
+    }
+    return 1;
+}
+
+/* the base name of a path of n bytes */
+static const char *base_name(const char *p, size_t n, int windows) {
+    const char *b = p;
+    for (size_t i = 0; i < n; i++)
+        if (p[i] == '/' || (windows && p[i] == '\\')) b = p + i + 1;
+    return b;
+}
+
+static int builder_ok(const char *exe, const char *args, int windows) {
+    const size_t n = strlen(exe);
+    if (!builder_path_ok(exe, n, windows)) return 0;
+    const char *base = base_name(exe, n, windows);
+    const size_t bn = n - (size_t)(base - exe);
+    if (!windows)   /* (builder/linux/AppRun: $APPIMAGE, or AppRun itself when it is unpacked) */
+        return (!args || !*args) && ((bn == 6 && !strcmp(base, "AppRun")) || (bn > 9 && ends_with_nocase(base, bn, ".AppImage")));
+    if (bn == 19 && ends_with_nocase(base, bn, "HookshotBuilder.exe")) return !args || !*args;
+    if (!((bn == 11 && ends_with_nocase(base, bn, "pythonw.exe")) || (bn == 10 && ends_with_nocase(base, bn, "python.exe"))))
+        return 0;
+    /* (subprocess.list2cmdline(["-I", start]): the script quoted when it has a space or a tab) */
+    if (!args || strncmp(args, "-I ", 3)) return 0;
+    const char *s = args + 3;
+    size_t sn = strlen(s);
+    if (sn >= 2 && s[0] == '"' && s[sn - 1] == '"') s++, sn -= 2;
+    else if (strpbrk(s, " \t")) return 0;
+    const char *sb = base_name(s, sn, 1);
+    return builder_path_ok(s, sn, 1) && sn - (size_t)(sb - s) == 25 && ends_with_nocase(s, sn, "hookshot_builder_start.py");
+}
+
 /* (the update tracks, from the folder's version: a release (v2.0.7) is offered the latest release as before; a release
    candidate (v2.1.0-rc.1) the newest of the release candidates and the releases, only when it is newer (so never an older
    release, and its own version's release once that ships); a nightly (git describe --long's v2.1.0-rc.1-3-g1a2b3c4) the
@@ -176,6 +239,18 @@ static int latest_tag(const char *have, char *tag, size_t cap) {
     return ok;
 }
 
+/* (hookshot) a symbolic link or a junction (a mount point; WSL's links too). Other reparse points are not links: OneDrive
+   marks its files and folders with one, and those are written as they are */
+static int is_link(const wchar_t *path, DWORD attributes) {
+    if (!(attributes & FILE_ATTRIBUTE_REPARSE_POINT)) return 0;
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW(path, &fd);
+    if (h == INVALID_HANDLE_VALUE) return 1;
+    FindClose(h);
+    return fd.dwReserved0 == IO_REPARSE_TAG_SYMLINK || fd.dwReserved0 == IO_REPARSE_TAG_MOUNT_POINT ||
+           fd.dwReserved0 == 0xA000001DUL /* IO_REPARSE_TAG_LX_SYMLINK */;
+}
+
 void hos_update_check(void) {
     if (getenv("HOOKSHOT_NO_UPDATE_CHECK") && strcmp(getenv("HOOKSHOT_NO_UPDATE_CHECK"), "0")) return;
     wchar_t dir[MAX_PATH], file[MAX_PATH + 64];
@@ -201,9 +276,16 @@ void hos_update_check(void) {
     MultiByteToWideChar(CP_UTF8, 0, tag, -1, wtag, 128);
     MultiByteToWideChar(CP_UTF8, 0, have, -1, whave, 128);
     _snwprintf(file, MAX_PATH + 64, L"%ls\\hookshot_version.txt", dir);
-    const int has_builder = read_value(file, "builder", builder, sizeof builder) &&
+    /* (the Python builder: builder= is its pythonw.exe, and builder_args= what goes before --update, its start script) */
+    char bargs[1024] = "";
+    wchar_t wbargs[1024] = L"";
+    read_value(file, "builder_args", bargs, sizeof bargs);
+    DWORD battr = INVALID_FILE_ATTRIBUTES;
+    const int has_builder = read_value(file, "builder", builder, sizeof builder) && builder_ok(builder, bargs, 1) &&
                             MultiByteToWideChar(CP_UTF8, 0, builder, -1, wbuilder, MAX_PATH) > 0 &&
-                            GetFileAttributesW(wbuilder) != INVALID_FILE_ATTRIBUTES;
+                            (!bargs[0] || MultiByteToWideChar(CP_UTF8, 0, bargs, -1, wbargs, 1024) > 0) &&
+                            (battr = GetFileAttributesW(wbuilder)) != INVALID_FILE_ATTRIBUTES &&
+                            !(battr & FILE_ATTRIBUTE_DIRECTORY);
     if (has_builder)
         _snwprintf(text, 2048,
                    L"A new version of Hookshot is out: %ls (this game is %ls).\n\n"
@@ -223,7 +305,13 @@ void hos_update_check(void) {
         _snwprintf(user, MAX_PATH + 16, L"%ls\\user", dir);
         CreateDirectoryW(user, NULL);
         _snwprintf(file, MAX_PATH + 64, L"%ls\\user\\hookshot_update_skip.txt", dir);
-        FILE *f = _wfopen(file, L"wb");
+        /* (not through a link or a junction: the user folder or the file put there in its place would have the write
+           land somewhere else) */
+        const DWORD ua = GetFileAttributesW(user), fa = GetFileAttributesW(file);
+        FILE *f = ua != INVALID_FILE_ATTRIBUTES && (ua & FILE_ATTRIBUTE_DIRECTORY) && !is_link(user, ua) &&
+                          (fa == INVALID_FILE_ATTRIBUTES || (!(fa & FILE_ATTRIBUTE_DIRECTORY) && !is_link(file, fa)))
+                      ? _wfopen(file, L"wb")
+                      : NULL;
         if (f) fprintf(f, "skip=%s\n", tag), fclose(f);
         return;
     }
@@ -232,11 +320,6 @@ void hos_update_check(void) {
         ShellExecuteW(NULL, L"open", RELEASES_PAGE, NULL, NULL, SW_SHOWNORMAL);
         return;
     }
-    /* (the Python builder: builder= is its pythonw.exe, and builder_args= what goes before --update, its start script) */
-    char bargs[1024] = "";
-    wchar_t wbargs[1024] = L"";
-    _snwprintf(file, MAX_PATH + 64, L"%ls\\hookshot_version.txt", dir);
-    if (read_value(file, "builder_args", bargs, sizeof bargs)) MultiByteToWideChar(CP_UTF8, 0, bargs, -1, wbargs, 1024);
     wchar_t args[MAX_PATH + 1280], wdir[MAX_PATH];
     _snwprintf(args, MAX_PATH + 1280, L"%ls%ls--update \"%ls\" --tag \"%ls\"", wbargs, wbargs[0] ? L" " : L"", dir, wtag);
     wcsncpy(wdir, wbuilder, MAX_PATH);
@@ -255,6 +338,7 @@ void hos_update_check(void) {
 #elif defined(__linux__)
 #include "hos_paths.h"
 #include <ctype.h>
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -342,6 +426,25 @@ static int installed_builder(char *out, size_t cap) {
     return access(out, X_OK) == 0;
 }
 
+/* (hookshot) "Skip this version": <dir>user/hookshot_update_skip.txt, written only into a real user folder and never
+   through a link (the folder or the file put there as a symbolic link would have the write truncate what it points to) */
+static int write_skip(const char *dir, const char *tag) {
+    char path[MAX_PATH + 64];
+    struct stat st;
+    snprintf(path, sizeof path, "%suser", dir);
+    mkdir(path, 0755);
+    if (lstat(path, &st) != 0 || !S_ISDIR(st.st_mode)) return 0;
+    snprintf(path, sizeof path, "%suser/hookshot_update_skip.txt", dir);
+    const int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK, 0644);
+    if (fd < 0) return 0;
+    if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) return close(fd), 0;
+    char line[160];
+    const int n = snprintf(line, sizeof line, "skip=%s\n", tag);
+    const int ok = n > 0 && n < (int)sizeof line && write(fd, line, (size_t)n) == n;
+    close(fd);
+    return ok;
+}
+
 void hos_update_check(void) {
     const char *off = getenv("HOOKSHOT_NO_UPDATE_CHECK");
     if (off && strcmp(off, "0")) return;
@@ -366,8 +469,10 @@ void hos_update_check(void) {
     if (!strcmp(tag, have) || !strcmp(tag, skipped)) return;
     if (strchr(have, '-') && !nightly_version(have) && !newer_version(tag, have)) return;   /* (a release candidate: newer only) */
     snprintf(path, sizeof path, "%shookshot_version.txt", dir);
+    struct stat bst;
     const int has_builder = installed_builder(builder, sizeof builder) ||
-                            (read_value(path, "builder", builder, sizeof builder) && access(builder, X_OK) == 0);
+                            (read_value(path, "builder", builder, sizeof builder) && builder_ok(builder, NULL, 0) &&
+                             stat(builder, &bst) == 0 && S_ISREG(bst.st_mode) && access(builder, X_OK) == 0);
     char text[1600], cmd[4096];
     snprintf(text, sizeof text,
              has_builder
@@ -381,11 +486,7 @@ void hos_update_check(void) {
     if (!fgets(answer, sizeof answer, pick)) answer[0] = 0;
     pclose(pick);
     if (!strncmp(answer, "Skip", 4)) {
-        snprintf(path, sizeof path, "%suser", dir);
-        mkdir(path, 0755);
-        snprintf(path, sizeof path, "%suser/hookshot_update_skip.txt", dir);
-        FILE *f = fopen(path, "wb");
-        if (f) fprintf(f, "skip=%s\n", tag), fclose(f);
+        write_skip(dir, tag);
         return;
     }
     if (strncmp(answer, "Update", 6)) return;

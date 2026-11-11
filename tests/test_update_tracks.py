@@ -47,9 +47,47 @@ int main(int argc, char **argv) {
         fclose(f);
         return printf("%s\n", newest_tag(body, tag, sizeof tag) ? tag : "-"), 0;
     }
+    if (argc == 5 && argv[1][0] == 'b')   /* b <exe> <args or -> <w|l> */
+        return printf("%d\n", builder_ok(argv[2], strcmp(argv[3], "-") ? argv[3] : NULL, argv[4][0] == 'w')), 0;
     return 2;
 }
 """
+
+# builder= / builder_args= as the builders write them (nx2/make_game.py from HOOKSHOT_BUILDER_EXE / _ARGS): the game
+# starts the builder they name, so other shapes are taken as no builder (the download page)
+PY_ARGS = r'-I "C:\Users\Ana Paula\Hookshot Builder\app\hookshot_builder_start.py"'
+BUILDERS_OK = [
+    (r"C:\Users\ana\Downloads\HookshotBuilder\HookshotBuilder.exe", "-", "w"),   # (Runner.cs: Environment.ProcessPath)
+    (r"D:/Games/HookshotBuilder.exe", "", "w"),
+    (r"C:\Users\Ana Paula\Hookshot Builder\python\pythonw.exe", PY_ARGS, "w"),   # (core.py: list2cmdline)
+    (r"C:\HB\python\python.exe", r"-I C:\HB\app\hookshot_builder_start.py", "w"),
+    ("/home/ana/Applications/Hookshot-x86_64.AppImage", "-", "l"),   # (builder/linux/AppRun: $APPIMAGE)
+    ("/home/ana/Hookshot/squashfs-root/AppRun", "-", "l"),            # (unpacked: $HERE/AppRun)
+]
+BUILDERS_BAD = [
+    (r"C:\Users\ana\Downloads\evil.bat", "-", "w"),
+    (r"C:\Users\ana\Downloads\HookshotBuilder.exe.lnk", "-", "w"),
+    (r"C:\Users\ana\Downloads\notHookshotBuilder.exe", "-", "w"),
+    (r"HookshotBuilder.exe", "-", "w"),                                     # (relative: the working folder's)
+    (r"..\HookshotBuilder.exe", "-", "w"),
+    (r"\\server\share\HookshotBuilder.exe", "-", "w"),                  # (a network path)
+    (r"C:\a\..\b\HookshotBuilder.exe", "-", "w"),
+    (r"C:\a\HookshotBuilder.exe", "--update x", "w"),                     # (the exe takes no builder_args)
+    (r"C:\HB\python\pythonw.exe", "-", "w"),                             # (python with no start script)
+    (r"C:\HB\python\pythonw.exe", r'-I "C:\HB\app\hookshot_builder_start.py', "w"),   # (unbalanced quote)
+    (r"C:\HB\python\pythonw.exe", r'-I "C:\HB\app\x.py" --update "C:\Windows" --tag "a"', "w"),
+    (r"C:\HB\python\pythonw.exe", r"-I C:\HB\app\hookshot_builder_start.py --fetched x", "w"),
+    (r"C:\HB\python\pythonw.exe", r"-c import os", "w"),
+    (r"C:\HB\python\pythonw.exe", r"-I app\hookshot_builder_start.py", "w"),   # (relative script)
+    (r"C:\HB\python\pythonw.exe", r"-I C:\HB\app\evil_hookshot_builder_start.py", "w"),
+    ("/usr/bin/sh", "-", "l"),
+    ("/tmp/x/hookshot", "-", "l"),
+    ("AppRun", "-", "l"),                                                   # (relative)
+    ("./Hookshot.AppImage", "-", "l"),
+    ("/home/ana/../tmp/Hookshot.AppImage", "-", "l"),
+    ("/home/ana/.AppImage", "-", "l"),
+    ("/home/ana/Hookshot.AppImage", "-I x", "l"),
+]
 
 
 def portable(source):
@@ -146,6 +184,18 @@ class Tracks(unittest.TestCase):
         self.assertEqual(linux_update.choose_mode(None, "v2.1.0-rc.1", "v2.0.14", False, False), "build")
         self.assertEqual(linux_update.choose_mode(None, "v2.1.0-rc.1", "v2.0.14", False, False, True), "update-builder")
         self.assertEqual(linux_update.choose_mode("v2.1.0-rc.1", "v2.1.0-rc.1", "v2.1.0-rc.2", False, True), "update-game")
+
+    def test_the_builder_the_game_starts_has_a_builders_shape(self):
+        for exe, args, os_ in BUILDERS_OK:
+            self.assertEqual(self.c("b", exe, args, os_), ["1"], (exe, args))
+        for exe, args, os_ in BUILDERS_BAD:
+            self.assertEqual(self.c("b", exe, args, os_), ["0"], (exe, args))
+        # (what the builders write passes: the Python builder's own arguments, from its own code)
+        self.assertEqual(subprocess.list2cmdline(["-I", r"C:\Users\Ana Paula\Hookshot Builder\app\hookshot_builder_start.py"]),
+                         PY_ARGS)
+        source = (ROOT / "host/hos_update.c").read_text(encoding="utf-8")
+        self.assertIn("builder_ok(builder, bargs, 1)", source)   # (Windows)
+        self.assertIn("builder_ok(builder, NULL, 0)", source)    # (Linux)
 
     def test_the_game_offers_a_release_candidate_only_a_newer_one(self):
         source = (ROOT / "host/hos_update.c").read_text(encoding="utf-8")
