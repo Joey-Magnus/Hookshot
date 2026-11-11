@@ -23,7 +23,9 @@ int main() {
     expect(!candidate(true, true, true, 0), "drawn over since: nothing left to keep");
     expect(!candidate(false, false, true, 0), "uploaded from the game's memory: made again from there");
     expect(!candidate(false, true, false, 0), "never sampled again after finalizing: goes as before");
-    expect(candidate(false, true, true, kMaxUnused), "unused exactly 1,800 presents: still one");
+    expect(kMaxUnused == vram_compact::kReserveUnused, "the age limit is the compaction reserve's line");
+    expect(candidate(false, true, true, kMaxUnused - 1), "unused one present short of 1,800: still one");
+    expect(!candidate(false, true, true, kMaxUnused), "unused 1,800 presents: the reserve's, not kept here");
     expect(!candidate(false, true, true, kMaxUnused + 1), "unused longer (an area left behind): goes, as #2198's reserve lets it");
 
     // within the cap: every candidate kept, the total unchanged

@@ -50,6 +50,7 @@
 #include "bc_levels.h"
 #include "astc_bc_policy.h"
 #include "vram_compact.h"
+#include "evict_reason.h"
 #include "keep_rendered.h"
 #include "keep_resampled.h"
 #include "target_overlap.h"
@@ -280,8 +281,8 @@ std::mutex pool_mu;
 std::unordered_map<uint64_t, std::vector<Pooled>> target_pool;   // by pool_key_of
 uint64_t pool_bytes, pool_n, st_pool_reused, st_pool_made, st_pool_destroyed;
 bool pool_pressed;   // (VRAM near what the driver allows: texture_frame's budget)
-bool compact_on() {   // (hookshot, RX_VK_COMPACT=1: the textures in a pool of their own, compacted: compact_step)
-    static const bool v = getenv("RX_VK_COMPACT") && atoi(getenv("RX_VK_COMPACT")) != 0;
+bool compact_on() {   // (hookshot: the textures in a pool of their own, compacted: compact_step. On unless RX_VK_COMPACT=0)
+    static const bool v = vram_compact::enabled(getenv("RX_VK_COMPACT"));
     return v;
 }
 uint64_t pool_cap() {
@@ -3588,10 +3589,11 @@ VkBufferView texel_buffer_view(const nvn_tex* t, const nvn_view* v, bool storage
     return view;
 }
 
-// ---- (hookshot) VRAM compacted (RX_VK_COMPACT=1; off by default) ----
+// ---- (hookshot) VRAM compacted (on by default since the hold lets go of the dead render targets first and of long-unused
+// textures only; RX_VK_COMPACT=0: off, as before) ----
 // An evicted texture's memory stays inside its 128 MB block, and the driver counts the block whole: after some play 0.6 to
 // 1.6 GB of what the driver counts is such free space (3 to 4 GB after the cache was emptied), and evicting more gives
-// none of it back. With RX_VK_COMPACT=1 the textures that are not render targets have a pool of their own (vk_vma.cpp; the targets have theirs) and, when RX_VK_COMPACT_MB (512)
+// none of it back. Compacted, the textures that are not render targets have a pool of their own (vk_vma.cpp; the targets have theirs) and, when RX_VK_COMPACT_MB (512)
 // or more of it is free space, VMA's defragmentation moves textures out of the sparsely used blocks, a few a pass: a new
 // image at the new place, the texels copied on the GPU in the present's upload commands (every draw of the frame is in an
 // earlier recording), the texture's views made again when next asked for, and the old image destroyed once the GPU is past
@@ -3911,6 +3913,7 @@ void texture_frame(uint64_t completed) {
     // out. RX_VK_BUDGET_BY_BLOCKS=1: as before)
     static const bool by_blocks = env_on("RX_VK_BUDGET_BY_BLOCKS");
     uint64_t evict_to = 0;   // (hookshot, RX_VK_COMPACT: what an eviction goes down to when the compaction's hold set the budget)
+    uint64_t hold_to = 0;    // (and what the hold's own line asks for, when the reserve's lower line set evict_to)
     // (hookshot, RX_VK_COMPACT) compacted, only the textures' pool's free space comes off the count: vram_compact.h
     uint64_t reclaim = block_free;
     if (compact_on()) {
@@ -3924,6 +3927,10 @@ void texture_frame(uint64_t completed) {
         const uint64_t over = pressure - allowed / 10 * 9;
         budget = std::min(budget, total_bytes > over ? total_bytes - over : 0);
     }
+    // (hookshot, RX_VK_COMPACT: what the budget's size and the 90% rule ask on their own, before the hold's lines; the 97%
+    // rule's joins it below. The hold's pass lets a texture unused for the eviction's own time go for that part, as a pass
+    // does with the compaction off: vram_compact::hold_target)
+    uint64_t rule_budget = budget;
     // (hookshot, RX_VK_COMPACT) and the count is held at RX_VK_COMPACT_PCT% of the allowance (85; 50 to 90), as it will be once a
     // run has given the textures' free space back: within ~0.8 GB of what the driver allows the GPU's frame went from ~10 ms
     // to 13-20 ms with the shadows in place, the driver itself short. At 85 a five-minute walk across Hyrule Field at DLAA
@@ -3937,6 +3944,11 @@ void texture_frame(uint64_t completed) {
         // was crossed on five passes in a row and the cache went from 4,589 to 2,312 MB (0.875^5) in two seconds, the
         // textures made again at 65-90 ms a frame)
         if (held < budget) budget = evict_to = held;
+        hold_to = evict_to;
+        // (and a reserve under that line, for the textures long unused: vram_compact.h. The pass below takes the others only
+        // for the hold's own line)
+        const uint64_t reserve = vram_compact::held_budget(budget, total_bytes, used, reclaim, allowed, vram_compact::reserve_pct(pct));
+        if (reserve < budget) budget = evict_to = reserve;
     }
     // (hookshot) not while VMA's blocks hold an eighth of the allowance free: new images take that space, the driver's count does
     // not grow, and what this evicts frees space inside the blocks that the count keeps. Ten frames later it squeezed again: a
@@ -3948,8 +3960,14 @@ void texture_frame(uint64_t completed) {
     if (known && !by_blocks && used > allowed / 100 * 97 && !room_in_blocks) {
         const uint64_t over = used - allowed / 100 * 97;
         budget = std::min(budget, total_bytes > over ? total_bytes - over : 0);
+        rule_budget = std::min(rule_budget, total_bytes > over ? total_bytes - over : 0);
     }
-    if (budget < evict_to) evict_to = 0;   // (hookshot, RX_VK_COMPACT: the driver's limit asks for more: 7/8 of that, as before)
+    const uint64_t rule_to = vram_compact::rule_target(total_bytes, rule_budget);
+    // (hookshot, RX_VK_COMPACT: the driver's limit asks for more than the reserve does: a pass over the budget, to 7/8 of it, as
+    // before. Rare once the reserve is set: its line is 17 points under the limit's and counts the textures' free space out, so
+    // this takes more than that share of the allowance free in their pool. Otherwise the pass is the hold's, and what the
+    // limit and the 90% rule ask for goes by rule_to)
+    if (budget < evict_to) evict_to = hold_to = 0;
     if (frame_no % 600 == 0) {
         vma_log_heaps();
         vma_log_image_blocks();
@@ -4116,15 +4134,18 @@ void texture_frame(uint64_t completed) {
         (uint64_t)(getenv("RX_VK_KEEP_RESAMPLED_MB") ? std::max(0, atoi(getenv("RX_VK_KEEP_RESAMPLED_MB"))) : 512) << 20;
     static const uint64_t keep_finalized_max =
         (uint64_t)(getenv("RX_VK_KEEP_FINALIZED_MB") ? std::max(0, atoi(getenv("RX_VK_KEEP_FINALIZED_MB"))) : 512) << 20;
-    const auto keep_finalized = [&](const Texture* tex) {
+    const auto finalized_once = [&](const Texture* tex) {   // (keep_finalized's textures, the resampled ones among them)
         if (!keep_finalized_max || !tex->gpu_written || !tex->released || !tex->first_written ||
             tex->first_written != tex->last_written || tex->bytes > (4ull << 20))
             return false;
-        if (keep_resampled_max && tex->resampled && frame_no - tex->last_frame <= keep_resampled::kMaxUnused)
-            return false;   // (keep_resampled's, below; with it off, kept here as before)
         const auto g = gpu_owned.find(tex->gpu);   // (its storage's range still the one the GPU drew it in)
         if (g == gpu_owned.end() || g->second.first != tex->gpu + std::max<uint64_t>(tex->guest_size, 1)) return false;
         return !drawn_over(tex) && !drawn_over_shifted(tex);
+    };
+    const auto keep_finalized = [&](const Texture* tex) {
+        // (a resampled one keep_resampled may keep is its, below, not counted here; with that rule off, kept here as before)
+        if (keep_resampled_max && tex->resampled && keep_resampled::recent(frame_no - tex->last_frame)) return false;
+        return finalized_once(tex);
     };
     uint64_t finalized_kept = 0;
     uint64_t resampled_total = 0;
@@ -4157,13 +4178,26 @@ void texture_frame(uint64_t completed) {
     static uint64_t n_dead, b_dead, dead_logged_at;
     // (hookshot) the textures to go are chosen first and destroyed after; the write-backs among them go to the GPU in a few
     // batches (flush_textures), not one submission and one wait each: a sweep of 500 at a scene load stalled for seconds
-    struct Evict { Texture* tex; bool flush, shifted; };
+    struct Evict { Texture* tex; bool flush, shifted, overwritten; };
     std::vector<Evict> evict;
     uint64_t pending_bytes = 0;   // (chosen below, their bytes not yet off total_bytes)
+    // (hookshot, RX_VK_COMPACT) a pass the compaction's hold asked for (evict_to) lets go of the dead render targets as a sweep
+    // does, all of them, and of live textures only for the excess left after those, and only of ones long unused: vram_compact.h's
+    // hold_met and hold_target. So it does not stop at the first texture past the excess: what the dead targets hold is counted first
+    const bool by_hold = evict_to != 0 && !sweep;
+    uint64_t hold_dead = 0, hold_live = 0;   // (what the dead targets hold; the live textures chosen so far)
+    if (by_hold)
+        for (auto& [last, tex] : order) {
+            if (frame_no - last < need_dead) break;
+            if (tex->last_value > completed) continue;
+            const bool shifted = drawn_over_shifted(tex);
+            if (frame_no - last < need_unused && !shifted) continue;
+            if (shifted || drawn_over(tex)) hold_dead += tex->bytes + tex->pad;
+        }
     for (auto& [last, tex] : order) {
         // (total_bytes can have drifted below the textures' sum (destroy_later clamps it): the chosen ones' bytes past it mean the
         // budget is met, not a wrapped difference that never is)
-        if ((!sweep && (pending_bytes >= total_bytes || total_bytes - pending_bytes <= (evict_to ? evict_to : budget / 8 * 7))) ||
+        if ((!sweep && !by_hold && (pending_bytes >= total_bytes || total_bytes - pending_bytes <= budget / 8 * 7)) ||
             frame_no - last < need_dead)
             break;
         const bool shifted = drawn_over_shifted(tex);
@@ -4181,8 +4215,10 @@ void texture_frame(uint64_t completed) {
         static const bool keep_over_only = env_on("RX_VK_KEEP_RENDERED_OVER");
         const uint64_t keep_rendered = keep_rendered::presents(known, used, allowed, keep_over_only);
         const bool overwritten = shifted || drawn_over(tex);   // (above)
-        if (keep_resampled::candidate(overwritten, tex->gpu_written, tex->resampled, frame_no - last) &&
-            keep_resampled::keep(tex->bytes, resampled_total, keep_resampled_max)) {   // (above. Oldest first, as keep_finalized)
+        // (above. Oldest first, as keep_finalized. Past its cap, a small finalized one is keep_finalized's again, below)
+        const bool resampled_candidate =
+            keep_resampled::candidate(overwritten, tex->gpu_written, tex->resampled, frame_no - last);
+        if (resampled_candidate && keep_resampled::keep(tex->bytes, resampled_total, keep_resampled_max)) {
             static int logged;
             if (logged++ < 20)
                 logf("vk: texture #%u %#llx %ux%u NVN %#x (%llu MB) the GPU drew and the game samples again after finalizing it: kept, "
@@ -4191,7 +4227,19 @@ void texture_frame(uint64_t completed) {
                      (unsigned long long)(resampled_total >> 20));
             continue;
         }
-        if (finalized_kept && keep_finalized(tex)) {   // (above. Oldest first: beyond the cap the least recently used go)
+        // (hookshot, RX_VK_COMPACT: the hold's pass, above. A live texture stays once the excess over its line is covered: the
+        // reserve's line for one long unused, the hold's own for one unused ten seconds, and what the other rules ask (the 90%
+        // rule, the budget's size, the driver's limit) for one unused as long as an eviction asks with the compaction off)
+        if (by_hold && !overwritten) {
+            const uint64_t to = vram_compact::hold_target(frame_no - last, need_unused, rule_to, hold_to, evict_to);
+            if (to == UINT64_MAX || vram_compact::hold_met(total_bytes, hold_live, hold_dead, to)) continue;
+        }
+        // (one keep_resampled let go past its cap: keep_finalized's as before that rule, if it is one of its textures. It joins
+        // keep_finalized's total here, so the older ones walked before it were judged without it: they keep a little more)
+        const bool finalized_after_resampled = keep_resampled_max && resampled_candidate && finalized_once(tex);
+        if (finalized_after_resampled) finalized_kept += tex->bytes;
+        // (above. Oldest first: beyond the cap the least recently used go)
+        if (finalized_kept && (finalized_after_resampled || keep_finalized(tex))) {
             if (finalized_kept <= keep_finalized_max) continue;
             finalized_kept -= tex->bytes;
             static int logged;
@@ -4235,9 +4283,12 @@ void texture_frame(uint64_t completed) {
         // tiled pattern over the Deku Tree's planks and Hyrule Field's path, with a 16 GB card's textures at the 6 GB budget
         // (issue 386). RX_VK_EVICT_NO_FLUSH=1: not written back, as before)
         static const bool no_flush = env_on("RX_VK_EVICT_NO_FLUSH");
-        evict.push_back({tex, !no_flush && !overwritten && tex->gpu_written && !tex->released && flushable(*tex), shifted});
+        evict.push_back({tex, !no_flush && !overwritten && tex->gpu_written && !tex->released && flushable(*tex), shifted, overwritten});
         pending_bytes += tex->bytes + tex->pad;
+        if (by_hold && !overwritten) hold_live += tex->bytes + tex->pad;
     }
+    evict_reason::Tally tally;                     // (why each one goes: the retired line below)
+    std::unordered_set<const Texture*> flushed_ok;   // (the write-backs that worked)
     {   // (the write-backs: batches of up to 64 textures or ~512 MB of staging memory, each one submission and one wait)
         std::vector<Flush> batch;
         uint64_t batch_bytes = 0;
@@ -4246,6 +4297,7 @@ void texture_frame(uint64_t completed) {
             flush_textures(batch);
             for (const Flush& f : batch)
                 if (f.ok) {
+                    flushed_ok.insert(f.t);
                     static std::atomic<int64_t> flushed{0};
                     if (++flushed % 50 == 1) logf("vk: textures the GPU drew, written back into their memory before eviction: %lld so far", (long long)flushed.load());
                 }
@@ -4263,6 +4315,17 @@ void texture_frame(uint64_t completed) {
     for (const Evict& e : evict) {   // (and each one's bookkeeping and its end, as before)
         Texture* tex = e.tex;
         if (e.shifted) n_dead++, b_dead += tex->bytes;
+        {   // (hookshot) why it goes, and whether its texels go with it (evict_reason.h). The flush above can fail: then they did
+            const bool lost = evict_reason::texels_lost(tex->gpu_written, e.overwritten, e.flush && flushed_ok.count(tex));
+            tally.add(evict_reason::classify(e.shifted, e.overwritten), lost, tex->bytes, tex->released);
+            static int lost_logged;
+            if (lost && lost_logged++ < 100)
+                // (always over the budget: a sweep lets only drawn-over textures go, and those lose nothing)
+                logf("vk: texture #%u %#llx %ux%ux%u x%u NVN %#x the GPU drew goes with no copy of its texels (%s, unused for %llu "
+                     "frames, over the budget): made again over this storage, it starts empty", tex->id, (unsigned long long)tex->gpu,
+                     tex->width, tex->height, tex->depth, tex->layers, tex->nvn_format, tex->released ? "finalized" : "live",
+                     (unsigned long long)(frame_no - tex->last_frame));
+        }
         watch_tex(tex, "evicted");
         if (!tex->gpu_written && tex->uploaded && !remade_skip_old()) {   // (above: made again, it is uploaded from memory)
             std::lock_guard lk(from_memory_mu);
@@ -4294,7 +4357,11 @@ void texture_frame(uint64_t completed) {
              (unsigned long long)(b_dead >> 20));
     }
     const size_t n = order.size() - textures.size();
-    if (n) logf("vk: %zu textures retired (%zu left, %llu MB)", n, textures.size(), (unsigned long long)(total_bytes >> 20));
+    if (n) {
+        char why[160];
+        evict_reason::describe(tally, why, sizeof why);
+        logf("vk: %zu textures retired (%zu left, %llu MB): %s", n, textures.size(), (unsigned long long)(total_bytes >> 20), why);
+    }
 }
 
 void texture_log_guest(const Texture* t) {
