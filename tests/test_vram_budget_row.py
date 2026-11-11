@@ -6,6 +6,8 @@ the menu's own functions from vk_menu.cpp and preset_caps_memory from vk_memory.
 budgets it gave before, the row's values, and that a budget chosen on the row (opts.budget 0) applies on any card while a
 preset's own still applies only on the card it is for. Source checks: the row-change handler clears opts.budget and sets
 the budgets from the row, the row leaves the preset alone, and an options file from before the row takes its preset's.
+A restart keeps a budget chosen on the row with a preset on: save() writes memory_budget=0 for it, and the preset's only
+comes back for a file with no memory_budget line at all (the fixture saves and loads with vk_menu.cpp's own lines).
 python -I -B tests/test_vram_budget_row.py [--cxx g++]
 """
 import argparse
@@ -63,6 +65,20 @@ def main():
     if "if (!has_vram_budget) opts.vram_budget = preset_vram_budget(opts.budget);" not in menu:
         fail.append("an options file from before the row does not take its preset's budgets")
 
+    def line_of(needle):
+        found = [l.strip() for l in menu.splitlines() if needle in l]
+        if len(found) != 1:
+            fail.append("vk_menu.cpp: not one line with " + needle)
+            return ""
+        return found[0]
+    save_line = line_of('fprintf(f, "memory_budget=%d\\n", opts.budget);')
+    parse_line = line_of('if (!strcmp(line, "memory_budget")) opts.budget =')
+    fallback_line = line_of("if (opts.preset > 0 && !has_memory_budget) opts.budget = opts.preset;")
+    row_fallback = line_of("if (!has_vram_budget) opts.vram_budget = preset_vram_budget(opts.budget);")
+    if fail:
+        print("FAIL: " + "\n".join(fail))
+        sys.exit(1)
+
     options = re.search(r"struct Options \{.*?\n\};", header, re.S).group(0)
     tables = menu[menu.index("constexpr int kVramBudgets"):menu.index("int preset_vram_budget")]
     fixture = r'''#include <algorithm>
@@ -78,6 +94,31 @@ SYNC_PRESET
 static uint64_t card_bytes = 16ull << 30;
 uint64_t device_vram_bytes() { return card_bytes; }
 CAPS
+#include <cstring>
+#include <cstdlib>
+// (a restart: the preset row, the VRAM budget row and memory_budget as save() writes them, read back as menu_init does)
+static void restart(bool write_memory_budget) {
+    FILE* f = std::tmpfile();
+    std::fprintf(f, "quality_preset=%d\nvram_budget=%d\n", opts.preset, opts.vram_budget);
+    if (write_memory_budget) SAVE_LINE
+    std::rewind(f);
+    opts = Options{};
+    bool has_vram_budget = false, has_memory_budget = false;
+    char line[80];
+    while (std::fgets(line, sizeof line, f)) {
+        char* eq = std::strchr(line, '=');
+        if (!eq) continue;
+        *eq = 0;
+        if (!std::strcmp(line, "quality_preset")) opts.preset = std::atoi(eq + 1);
+        if (!std::strcmp(line, "vram_budget")) opts.vram_budget = std::atoi(eq + 1);
+        PARSE_LINE
+        has_vram_budget |= !std::strcmp(line, "vram_budget");
+    }
+    std::fclose(f);
+    FALLBACK_LINE
+    ROW_FALLBACK
+    vram_budget_sync();
+}
 int main() {
     // (each preset's budgets as before the row: 2200/256, 3600/512, 4800/1024, 7500/2048, 11000/3072)
     const int texture[] = {0, 2200, 3600, 4800, 7500, 11000}, mirror[] = {0, 256, 512, 1024, 2048, 3072};
@@ -106,7 +147,22 @@ int main() {
     opts.budget = 4;
     sync_preset_budgets(4);
     CHECK(preset_caps_memory());    // (High on a 12 GB card: its own, as before)
-    std::printf("PASS: the VRAM budget row sets the budgets, the presets give theirs as before\n");
+    // (High on, 4.8 GB chosen on the row, a 16 GB card: still the player's after a restart)
+    card_bytes = 16ull << 30;
+    opts.preset = opts.budget = 4;
+    sync_preset_budgets(4);
+    opts.budget = 0;
+    opts.vram_budget = 3;
+    vram_budget_sync();
+    restart(true);
+    CHECK(opts.preset == 4 && opts.budget == 0 && opts.vram_budget == 3);
+    CHECK(opts.vram_mb == 4800 && preset_caps_memory());
+    // (a file from before memory_budget, High on: the preset's budgets, as before)
+    opts.preset = 4;
+    opts.vram_budget = 5;
+    restart(false);
+    CHECK(opts.budget == 4 && opts.vram_mb == 7500);
+    std::printf("PASS: the VRAM budget row sets the budgets, the presets give theirs as before, a restart keeps the row's\n");
     return 0;
 }
 '''
@@ -115,7 +171,9 @@ int main() {
                         "\nint vram_budget_of_preset(int p) { return preset_vram_budget(p); }"),
                        ("SYNC_PRESET", definition(menu, "void sync_preset_budgets(int p)")),
                        ("SYNC", definition(menu, "void vram_budget_sync()")),
-                       ("CAPS", definition(memory, "bool preset_caps_memory()"))):
+                       ("CAPS", definition(memory, "bool preset_caps_memory()")),
+                       ("SAVE_LINE", save_line), ("PARSE_LINE", parse_line), ("FALLBACK_LINE", fallback_line),
+                       ("ROW_FALLBACK", row_fallback)):
         fixture = fixture.replace(key, value, 1)
     with tempfile.TemporaryDirectory(prefix="vram-budget-row-") as tmp:
         cpp = Path(tmp) / "fixture.cpp"

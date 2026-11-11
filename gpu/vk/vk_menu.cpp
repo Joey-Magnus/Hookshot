@@ -1408,7 +1408,9 @@ void save() {
             }
         }
         if (!mic_want.empty()) fprintf(f, "microphone_device=%s\n", mic_want.c_str());   // (hookshot: also while it is unplugged)
-        if (opts.budget > 0) fprintf(f, "memory_budget=%d\n", opts.budget);   // (not a row: the budgets Custom keeps)
+        // (not a row: the budgets Custom keeps. 0 too: with a preset on, the VRAM budget row chosen by the player, which the next
+        // start must not take back to the preset's)
+        fprintf(f, "memory_budget=%d\n", opts.budget);
         // (2: game_speed below 2 was only ever the old default, see menu_init; 3: the mouse's buttons are bindings, see
         // host/nn_hid.c binds_load; 4: Descriptor reuse on by default, see menu_init and vk_draw.cpp desc_slotgen_on)
         fprintf(f, "options_version=4\n");
@@ -2957,6 +2959,7 @@ void menu_init() {
     for (auto& count : item_counts) count.store(-1, std::memory_order_relaxed);
     bool has_options = false;
     bool has_vram_budget = false;   // (hookshot: a file from before the VRAM budget row: its preset's, memory_budget's)
+    bool has_memory_budget = false;   // (a file from before memory_budget: its preset's)
     const char* cheats = getenv("HOS_OOT_CHEATS");
     cheats_env = cheats && !strcmp(cheats, "1");
     if (cheats_env) {
@@ -2985,7 +2988,7 @@ void menu_init() {
             if (!strcmp(line, "options_version")) version = atoi(eq + 1);
             if (!strcmp(line, "dynamic_resolution")) old_dynres = atoi(eq + 1);
             if (!strcmp(line, "menu_size") && atoi(eq + 1) == 0) menu_auto = true;
-            if (!strcmp(line, "memory_budget")) opts.budget = std::min(std::max(atoi(eq + 1), 0), 5);
+            if (!strcmp(line, "memory_budget")) opts.budget = std::min(std::max(atoi(eq + 1), 0), 5), has_memory_budget = true;
             has_vram_budget |= !strcmp(line, "vram_budget");
             if (!strcmp(line, "microphone_device")) {   // (hookshot: the microphone, by its name)
                 mic_want = mic_key(eq + 1);
@@ -3018,7 +3021,7 @@ void menu_init() {
         opts.upscale = 0;
         opts.sharpness = 0;
     }
-    if (opts.preset > 0) opts.budget = opts.preset;   // (a file from before memory_budget: its preset's)
+    if (opts.preset > 0 && !has_memory_budget) opts.budget = opts.preset;   // (a file from before memory_budget: its preset's)
     if (!has_vram_budget) opts.vram_budget = preset_vram_budget(opts.budget);   // (a file from before the row)
     vram_budget_sync();
     fps_cap_started = opts.fps_cap;   // (the FPS counter's graph: the cap applies from the start, host/nn_vi.c)
