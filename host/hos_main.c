@@ -397,9 +397,23 @@ static int env_line_allowed(const char *name, const char *value) {
        out of the list above): RX_VK_DUMP*, RX_DUMP*, HOS_*_DUMP, RX_*_DUMPS. tests/test_env_file.py also looks through
        the sources for switches whose value is a path and checks that this file cannot set them */
     names_file |= strstr(name, "_DUMP") != NULL;
-    /* RX_VK_DLSS_DIR: a folder on this PC, not a share (\\server\x or //server/x) or a device path */
-    if (!strcmp(name, "RX_VK_DLSS_DIR"))
-        return !((value[0] == '\\' || value[0] == '/') && (value[1] == '\\' || value[1] == '/'));
+    /* RX_VK_DLSS_DIR: a folder on this PC named in full (C:\x on Windows, /x on Linux), not a share (\\server\x or
+       //server/x) or a device path; (hookshot) not a relative one either, which NGX resolved against whatever folder
+       the game was started from, and no .. step out of the folder the value names */
+    if (!strcmp(name, "RX_VK_DLSS_DIR")) {
+#ifdef _WIN32
+        const int full = ((value[0] | 0x20) >= 'a' && (value[0] | 0x20) <= 'z' && value[1] == ':' &&
+                          (value[2] == '\\' || value[2] == '/'));
+#else
+        const int full = value[0] == '/' && value[1] != '/';
+#endif
+        if (!full) return 0;
+        for (const char *p = value; *p; p++)
+            if (p[0] == '.' && p[1] == '.' && (p == value || p[-1] == '/' || p[-1] == '\\') &&
+                (!p[2] || p[2] == '/' || p[2] == '\\'))
+                return 0;
+        return 1;
+    }
     if (names_file) return 0;
     const int drive = ((value[0] | 0x20) >= 'a' && (value[0] | 0x20) <= 'z' && value[1] == ':');
     return !strpbrk(value, "/\\") && !drive && value[0] != '~' && strcmp(value, ".") && strcmp(value, "..");

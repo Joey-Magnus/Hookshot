@@ -7,6 +7,7 @@ run does not fall back to the player's switches.
 python -I -B tests/test_env_file.py [--cc gcc]
 """
 import argparse
+import os
 import re
 import subprocess
 import tempfile
@@ -65,6 +66,44 @@ def check_path_valued(cc, main_c, tmp):
     print("PASS: none of the %d switches whose value is a path can be set from hookshot_env.txt" % len(names))
 
 
+# (RX_VK_DLSS_DIR, the one path a shared file may set: a folder named in full on this PC, nothing relative, no share,
+# device path or .. step; True = taken)
+DLSS_DIRS = {
+    "linux": [("/opt/ngx", True), ("/home/x/.local/share/hookshot/ngx", True), ("/x/..dir/ngx", True),
+              ("ngx", False), (".", False), ("..", False), ("../../Downloads", False), ("~/ngx", False),
+              ("//server/share", False), ("/opt/../home/x", False), ("/opt/ngx/..", False), ("", False),
+              ("C:\\ngx", False)],
+    "windows": [("C:\\ngx", True), ("d:/games/ngx", True), ("C:\\x\\..dll\\ngx", True),
+                ("ngx", False), ("C:ngx", False), ("\\ngx", False), ("\\\\server\\share", False),
+                ("\\\\?\\C:\\ngx", False), ("//server/share", False), ("C:\\x\\..\\..\\Users", False),
+                ("C:\\ngx\\..", False), ("..\\ngx", False), ("/opt/ngx", False), ("", False)],
+}
+
+
+DLSS_OK = "C:\\ngx" if os.name == "nt" else "/opt/ngx"   # (the fixture's own value, taken on this system)
+
+
+def check_dlss_dir(cc, main_c, tmp):
+    src = tmp / "dlss_dir.c"
+    src.write_text("#include <stdio.h>\n#include <string.h>\n" + block(main_c, "static int env_line_allowed(") +
+                   '\nint main(int c, char **v) { for (int i = 1; i < c; i++) '
+                   'printf("%d\\n", env_line_allowed("RX_VK_DLSS_DIR", v[i])); return 0; }\n', encoding="utf-8")
+    bad = []
+    # (the rule is per system: Windows runs its own cases; Linux runs both, the Windows ones built with _WIN32 set)
+    for system, cases in DLSS_DIRS.items():
+        if os.name == "nt" and system != "windows":
+            continue
+        exe = tmp / ("dlss_dir_" + system)
+        subprocess.run([cc, "-std=c11", "-Wall", "-Werror", *(["-D_WIN32"] if system == "windows" and os.name != "nt" else []), str(src),
+                        "-o", str(exe)], check=True)
+        got = subprocess.run([str(exe), *(v for v, _ in cases)], capture_output=True, text=True, check=True).stdout.split()
+        bad += ["%s %r: %s" % (system, v, "taken" if g == "1" else "refused") for (v, want), g in zip(cases, got)
+                if (g == "1") != want]
+    if bad:
+        raise SystemExit("RX_VK_DLSS_DIR from hookshot_env.txt: " + "; ".join(bad))
+    print("PASS: a shared hookshot_env.txt sets RX_VK_DLSS_DIR only to a folder named in full on this PC")
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--cc", default="gcc")
@@ -75,13 +114,14 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
         check_path_valued(a.cc, main_c, tmp)
+        check_dlss_dir(a.cc, main_c, tmp)
         game = tmp / "game"
         game.mkdir()
         # (the player's file sets the game's switches only: not the system's variables, HOS_ENV_FILE or paths)
         (game / "hookshot_env.txt").write_text(
             "HOS_T_BESIDE=1\nHOS_T_SHARED=beside\nVK_ADD_LAYER_PATH=/x\nLD_PRELOAD=/x.so\nPATH=C:\\x\nSDL_DYNAMIC_API=/x.so\n"
             "HOS_ENV_FILE=other.txt\nHOS_SAMPLE_FILE=/home/x/.bashrc\nRX_VK_DUMP_DIR=C:\\Users\\x\nRX_VK_SKIP_CODE=2c56,ab\n"
-            "RX_VK_DLSS_DIR=/opt/ngx\nHOS_T_HOME=~\nSDL_VULKAN_LIBRARY=x.dll\nSDL_VIDEO_EGL_DRIVER=x.so\n"
+            "RX_VK_DLSS_DIR=" + DLSS_OK + "\nHOS_T_HOME=~\nSDL_VULKAN_LIBRARY=x.dll\nSDL_VIDEO_EGL_DRIVER=x.so\n"
             "SDL_AUDIODRIVER=pulseaudio\nHOS_T_UP=..\nHOS_SAMPLE_FILE=hookshot_vk.dll\nRX_VK_FRAME_LOG=x.txt\n"
             "RX_VK_DUMP_DIR=dumps\nHOS_PRESENT_TRACE=t.txt\nRX_VK_DLSS_DIR=\\\\server\\share\n"
             "HOS_AUDIO_DUMP=image.bin\nRX_VK_HANG_DUMP=hookshot_options.ini\nRX_VK_SHOTS=user\n"
@@ -126,7 +166,7 @@ int main(int argc, char **argv) {
     CHECK(is("HOS_INPUT_SCRIPT", NULL) && is("RX_VK_MENU_SCRIPT", NULL));
     CHECK(is("RX_VK_DUMP_NATIVE", NULL) && is("RX_DUMP_IR", NULL) && is("RX_SCREENSHOT", NULL) && is("RX_FLASH_LOG", NULL));
     CHECK(is("HOS_SCAN_DT", NULL) && is("RX_VK_FLASH_DUMPS", NULL) && is("RX_FRAMEGEN_DUMP", NULL));
-    CHECK(is("RX_VK_SKIP_CODE", "2c56,ab") && is("RX_VK_DLSS_DIR", "/opt/ngx"));
+    CHECK(is("RX_VK_SKIP_CODE", "2c56,ab") && is("RX_VK_DLSS_DIR", "''' + DLSS_OK.replace("\\", "\\\\") + r'''"));
     CHECK(is("SDL_VULKAN_LIBRARY", NULL) && is("SDL_VIDEO_EGL_DRIVER", NULL) && is("HOS_T_UP", NULL));
     CHECK(is("SDL_AUDIODRIVER", "pulseaudio") && is("HOS_SAMPLE_FILE", NULL) && is("RX_VK_FRAME_LOG", NULL));
     CHECK(is("RX_VK_DUMP_DIR", NULL) && is("HOS_PRESENT_TRACE", NULL));

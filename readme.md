@@ -729,7 +729,8 @@ line, on Windows and Linux. The running game reads it, not the builder. A test r
 `HOS_ENV_FILE=<path>`; the game then reads that one instead and leaves `hookshot_env.txt` alone.
 `hookshot_env.txt` sets only the game's own switches (names that start with `RX_`, `HOS_`, `HOOKSHOT_`, `EDEN_`,
 `NVN_`, `TOTK_` or `SDL_`, but not SDL's library names such as `SDL_VULKAN_LIBRARY`), and no value that is a path except
-`RX_VK_DLSS_DIR`'s (a folder on this PC, not a network share), and no value at all for the switches that name a file
+`RX_VK_DLSS_DIR`'s (a folder on this PC named by its full path, such as `C:\ngx` or `/opt/ngx`, not a
+network share), and no value at all for the switches that name a file
 or folder (`HOS_AUDIO_DUMP`, `RX_VK_SHOTS` and the like, and every dump switch: any name with `_DUMP` in it) or press buttons on a timer (`HOS_INPUT_SCRIPT`,
 `RX_VK_MENU_SCRIPT`); other lines are left out, and the log says so. Switches that need a path, or other variables, go
 in a file named by `HOS_ENV_FILE`.
