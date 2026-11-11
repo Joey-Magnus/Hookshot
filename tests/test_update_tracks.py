@@ -184,7 +184,7 @@ class Tracks(unittest.TestCase):
             if url == linux_update.LATEST_API:
                 return b'{"tag_name": "v2.0.14"}'
             if url.endswith("/releases/download/nightly/hookshot-linux.txt"):
-                return ("tag v2.1.0-rc.1-3-g1a2b3c4\npart %s 10 usr/share/hookshot https://example.invalid/a.zip\nfile x\n"
+                return ("tag v2.1.0-rc.1-3-g1a2b3c4\npart %s 10 usr/share/hookshot https://github.com/NotRexed/Hookshot/releases/download/linux-parts/a.zip\nfile x\n"
                         % ("a" * 64)).encode()
             raise OSError(url)
         self.assertEqual(linux_update.latest_tag(get), "v2.0.14")

@@ -134,10 +134,25 @@ def list_name_ok(s, path=False):
     return all(q not in ("", ".", "..") for q in names)
 
 
+PART_SOURCES = ("https://github.com/%s/releases/download/" % REPO, "https://github.com/mstorsjo/llvm-mingw/releases/download/")
+
+
+def part_url_ok(url):
+    """(builder/setup/setup.c part_url_ok) a part's link is under this project's releases or llvm-mingw's, with no "..", escape,
+    query or other host hidden in the rest; HOOKSHOT_SETUP_LIST (a list for testing a release elsewhere): any https link"""
+    if os.environ.get("HOOKSHOT_SETUP_LIST"):
+        return url[:8].lower() == "https://"
+    for base in PART_SOURCES:
+        if url.startswith(base):
+            rest = url[len(base):]
+            return bool(rest) and ".." not in rest and not any(c in rest for c in "%?#@\\:")
+    return False
+
+
 def list_ok(tag, parts):
     """(the list's names become paths under the install folder, a folder install() removes and remakes: they stay inside it)"""
     return list_name_ok(tag) and all(
-        re.fullmatch(r"[0-9a-f]{64}", p.sha) and p.url[:8].lower() == "https://" and (p.dest == "." or list_name_ok(p.dest, True))
+        re.fullmatch(r"[0-9a-f]{64}", p.sha) and part_url_ok(p.url) and (p.dest == "." or list_name_ok(p.dest, True))
         and (p.frm == "-" or list_name_ok(p.frm)) and (p.to == "-" or list_name_ok(p.to)) for p in parts)
 
 
