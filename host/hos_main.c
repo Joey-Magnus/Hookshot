@@ -396,6 +396,10 @@ static int env_line_allowed(const char *name, const char *value) {
     /* (hookshot) nor the libraries SDL loads by name (SDL_VULKAN_LIBRARY, SDL_OPENGL_LIBRARY, SDL_VIDEO_GL_DRIVER,
        SDL_VIDEO_EGL_DRIVER...): a bare file name is looked for beside the game and in the current folder on Windows */
     if (!strncmp(name, "SDL_", 4) && (strstr(name, "_LIB") || strstr(name, "GL_DRIVER"))) return 0;
+    /* (hookshot) nor SDL's switches that write files where the game was started: the dummy and offscreen video drivers'
+       SAVE_FRAMES (a picture each frame) and the disk audio driver (the sound, without end, to sdlaudio.raw) */
+    if (!strncmp(name, "SDL_", 4) && strstr(name, "SAVE_FRAMES")) return 0;
+    if ((!strcmp(name, "SDL_AUDIODRIVER") || !strcmp(name, "SDL_AUDIO_DRIVER")) && strstr(value, "disk")) return 0;
     for (const char *p = name; *p; p++)
         if (!((*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9') || *p == '_')) return 0;
     /* (hookshot) the switches that name a file to write or a folder take no value here, not even a bare name: one
@@ -411,7 +415,8 @@ static int env_line_allowed(const char *name, const char *value) {
         "HOS_INPUT_SCRIPT", "HOS_SAMPLE_ALL", "HOS_WATCH", "HOOKSHOT_BUILDER_HOME", "RX_VK_SHOTS", "RX_VK_SHOT_GO",
         "RX_VK_FRAMELOG", "RX_VK_HANG_DUMP", "RX_VK_DUMP", "RX_VK_DUMP_SPV", "RX_VK_DUMP_MESH_SPV", "RX_VK_DUMP_STAGES",
         "RX_VK_DUMP_FAILED", "RX_VK_IR", "RX_VK_MENU_SCRIPT", "RX_DUMP_WGSL", "RX_DUMP_SLOW_WGSL", "RX_DUMP_TICS",
-        "RX_WGSL_OVERRIDE", "RX_SCREENSHOT", "RX_FLASH_LOG", "HOS_SCAN_DT"};
+        "RX_WGSL_OVERRIDE", "RX_SCREENSHOT", "RX_FLASH_LOG", "HOS_SCAN_DT",
+        "RX_VK_FRAME_TRACE"};   /* (hookshot: hookshot_frames.csv, a line each frame without end) */
     for (size_t i = 0; i < sizeof by_name / sizeof *by_name; i++) names_file |= !strcmp(name, by_name[i]);
     /* (hookshot) and every dump switch by its family, not one by one (RX_VK_DUMP_NATIVE and RX_DUMP_IR had been left
        out of the list above): RX_VK_DUMP*, RX_DUMP*, HOS_*_DUMP, RX_*_DUMPS. tests/test_env_file.py also looks through

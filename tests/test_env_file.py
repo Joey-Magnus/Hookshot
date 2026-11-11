@@ -126,7 +126,9 @@ def main():
             "RX_VK_DUMP_DIR=dumps\nHOS_PRESENT_TRACE=t.txt\nRX_VK_DLSS_DIR=\\\\server\\share\n"
             "HOS_AUDIO_DUMP=image.bin\nRX_VK_HANG_DUMP=hookshot_options.ini\nRX_VK_SHOTS=user\n"
             "HOS_INPUT_SCRIPT=1:A,2:A\nRX_VK_MENU_SCRIPT=1:INS\nRX_VK_DUMP_NATIVE=0\nRX_DUMP_IR=ir\nRX_SCREENSHOT=romfs\n"
-            "RX_FLASH_LOG=user\nHOS_SCAN_DT=x\nRX_VK_FLASH_DUMPS=6\nRX_FRAMEGEN_DUMP=1\n", encoding="utf-8")
+            "RX_FLASH_LOG=user\nHOS_SCAN_DT=x\nRX_VK_FLASH_DUMPS=6\nRX_FRAMEGEN_DUMP=1\n"
+            "SDL_VIDEO_DUMMY_SAVE_FRAMES=1\nSDL_VIDEO_OFFSCREEN_SAVE_FRAMES=1\nSDL_AUDIO_DRIVER=disk\n"
+            "SDL_AUDIODRIVER=pulseaudio,disk\nSDL_VIDEODRIVER=x11\nRX_VK_FRAME_TRACE=1\n", encoding="utf-8")
         (tmp / "test_env.txt").write_text("# a test run's own switches\nHOS_T_OTHER=1\nHOS_T_SHARED=other\n"
                                           "VK_T_LAYER=/y\n", encoding="utf-8")
         exe = str(game / "hookshot").replace("\\", "\\\\")
@@ -158,6 +160,8 @@ static void clear(void) { unsetenv("HOS_T_BESIDE"); unsetenv("HOS_T_OTHER"); uns
 int main(int argc, char **argv) {
     (void)argc;
     unsetenv("HOS_ENV_FILE");                      /* out of the box: the file beside the game */
+    unsetenv("SDL_AUDIO_DRIVER"), unsetenv("SDL_VIDEO_DUMMY_SAVE_FRAMES"), unsetenv("SDL_VIDEO_OFFSCREEN_SAVE_FRAMES");
+    unsetenv("RX_VK_FRAME_TRACE");
     load_hookshot_env();
     CHECK(is("HOS_T_BESIDE", "1") && is("HOS_T_SHARED", "beside") && is("HOS_T_OTHER", NULL));
     CHECK(is("VK_ADD_LAYER_PATH", NULL) && is("SDL_DYNAMIC_API", NULL) && is("HOS_ENV_FILE", NULL));
@@ -169,6 +173,8 @@ int main(int argc, char **argv) {
     CHECK(is("RX_VK_SKIP_CODE", "2c56,ab") && is("RX_VK_DLSS_DIR", "''' + DLSS_OK.replace("\\", "\\\\") + r'''"));
     CHECK(is("SDL_VULKAN_LIBRARY", NULL) && is("SDL_VIDEO_EGL_DRIVER", NULL) && is("HOS_T_UP", NULL));
     CHECK(is("SDL_AUDIODRIVER", "pulseaudio") && is("HOS_SAMPLE_FILE", NULL) && is("RX_VK_FRAME_LOG", NULL));
+    CHECK(is("SDL_VIDEO_DUMMY_SAVE_FRAMES", NULL) && is("SDL_VIDEO_OFFSCREEN_SAVE_FRAMES", NULL) && is("SDL_AUDIO_DRIVER", NULL));
+    CHECK(is("SDL_VIDEODRIVER", "x11") && is("RX_VK_FRAME_TRACE", NULL));
     CHECK(is("RX_VK_DUMP_DIR", NULL) && is("HOS_PRESENT_TRACE", NULL));
     CHECK(getenv("LD_PRELOAD") == NULL || strcmp(getenv("LD_PRELOAD"), "/x.so"));
     CHECK(getenv("PATH") == NULL || strcmp(getenv("PATH"), "C:\\x"));
