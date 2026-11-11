@@ -22,6 +22,7 @@ cpp=r"""
 #include "vk_progress.h"
 using namespace mkwvk;
 #include <cstdio>
+#include "HOS_FOPEN_WRITE_H"   // (the game's own writes: host/hos_fopen_write.h)
 #include <cstdlib>
 #include <string>
 #include <vector>
@@ -76,7 +77,7 @@ int main(int argc,char** argv){
 }
 """
 with tempfile.TemporaryDirectory(prefix='prepare-cache-') as tmp:
-    src=Path(tmp)/'fixture.cpp';exe=Path(tmp)/'fixture.exe';src.write_text(cpp)
+    src=Path(tmp)/'fixture.cpp';exe=Path(tmp)/'fixture.exe';src.write_text(cpp.replace("HOS_FOPEN_WRITE_H", (a.source / "host" / "hos_fopen_write.h").as_posix()))
     subprocess.run([a.cxx,'-std=c++20','-I',str(a.source/'gpu'/'vk'),str(src),'-o',str(exe)],check=True)
     env={k:v for k,v in os.environ.items() if k not in ('RX_VK_SEED_CHECK','RX_VK_PREPARE_AGAIN')}
     for mode, expected in [('fresh', ['0.714']), ('refresh', ['0.125','0.500','0.750']), ('empty', ['0.500'])]:

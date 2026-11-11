@@ -35,6 +35,7 @@
 #include <xinput.h>
 #include "../gpu/vk/vk_api.h"   /* (the controls' names: HOS_SW_*, HOS_PAD_*) */
 #include "hos_motion.h"
+#include "hos_fopen_write.h"
 
 enum { B_A = 0, B_B, B_X, B_Y, B_LS, B_RS, B_L, B_R, B_ZL, B_ZR, B_PLUS, B_MINUS, B_LEFT, B_UP, B_RIGHT, B_DOWN };
 #define STATE_SIZE 0x28
@@ -59,7 +60,7 @@ extern const char *hos_user_dir;
 static void mouse_sens_save(void) {
     char path[512];
     snprintf(path, sizeof path, "%s/mouse_sens.txt", hos_user_dir ? hos_user_dir : "user");
-    FILE *f = fopen(path, "w");
+    FILE *f = hos_fopen_write(path, "w");
     if (f) { fprintf(f, "%.3f\n", hos_mouse_sens); fclose(f); }
 }
 

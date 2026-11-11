@@ -9,6 +9,7 @@
 #include <string.h>
 #include <time.h>
 #include <windows.h>   /* (the exe's folder; the browser build: the Microsoft C runtime's time functions) */
+#include "hos_fopen_write.h"
 
 static int64_t boot_ns;
 
@@ -64,7 +65,7 @@ static const char *desired_language(void) {
                 break;
             }
             fclose(f);
-        } else if ((f = fopen(path, "w")) != NULL) {
+        } else if ((f = hos_fopen_write(path, "w")) != NULL) {
             fputs("# The game's language. Change the line below to one of the codes listed here, save, and start the game again.\n\nen-US\n\n", f);
             for (size_t i = 0; i < sizeof languages / sizeof *languages; i++) fprintf(f, "# %-8s %s\n", languages[i].code, languages[i].name);
             fclose(f);

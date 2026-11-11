@@ -56,6 +56,7 @@
 #include "shaders/shadow_stab_comp_spv.h"
 #include "shaders/movie_upscale_comp_spv.h"
 #include "shader_recompiler/backend/spirv/mma_layout.h"
+#include "../../host/hos_fopen_write.h"   // (the pipeline caches, lists and markers: not through a link)
 #include "vk_work.h"   // (after the others: counts the commands that do GPU work, for full_barrier)
 
 namespace mkwvk {
@@ -769,7 +770,7 @@ size_t play_file_write(VkPipelineCache cache, const std::string& path) {
     std::vector<uint8_t> data(n);
     if (vkGetPipelineCacheData(dev.device, cache, &n, data.data()) != VK_SUCCESS) return 0;
     const std::string tmp = path + ".tmp";
-    FILE* f = fopen(tmp.c_str(), "wb");
+    FILE* f = hos_fopen_write(tmp.c_str(), "wb");
     if (!f) return 0;
     bool ok = fwrite(data.data(), 1, n, f) == n;
     ok = fclose(f) == 0 && ok;   // (its last bytes go to the disk at the close)
@@ -1238,7 +1239,7 @@ void notes_open_locked(const std::vector<std::unique_ptr<PipeNote>>* known) {
             fclose(f);
         }
     }
-    note_file = fopen(path.c_str(), same ? "ab" : "wb");
+    note_file = hos_fopen_write(path.c_str(), same ? "ab" : "wb");
     if (note_file && !same) {
         const uint64_t h[2] = {stamp, sizeof(PipeNote)};
         fwrite(h, 8, 2, note_file);
@@ -1292,7 +1293,7 @@ void compute_note(uint64_t key) {
     if (!compute_note_file) {
         computes_noted = computes_read();
         const bool append = !computes_noted.empty();   // (none read: a new file, or one that is not a list)
-        compute_note_file = fopen(computes_path().c_str(), append ? "ab" : "wb");
+        compute_note_file = hos_fopen_write(computes_path().c_str(), append ? "ab" : "wb");
         if (compute_note_file && !append) fwrite(kComputesMagic, 1, 8, compute_note_file);
     }
     if (compute_note_file && computes_noted.insert(key).second) fwrite(&key, 8, 1, compute_note_file), fflush(compute_note_file);
@@ -1472,7 +1473,7 @@ void state_open_locked() {
             if (rename(path.c_str(), old.c_str()) == 0) logf("vk: state list: the version 1 list kept as %s", old.c_str());
         }
     }
-    state_file = fopen(path.c_str(), keep ? "ab" : "wb");
+    state_file = hos_fopen_write(path.c_str(), keep ? "ab" : "wb");
     if (state_file && !keep) {
         const uint32_t size = sizeof(StateRec2);
         fwrite(kStateMagic2, 8, 1, state_file), fwrite(&size, 4, 1, state_file);
@@ -7366,7 +7367,7 @@ int prepared_read(const std::string& path, PreparedFor* had) {
 }
 void prepared_write(const std::string& path, const PreparedFor& now) {
     const uint64_t r[6] = {now.stamp, now.seed_hash, now.seed_size, (uint64_t)now.seed_time, (uint64_t)file_clock_now(), now.warmed};
-    if (FILE* f = fopen(path.c_str(), "wb")) fwrite(r, 8, 6, f), fclose(f);
+    if (FILE* f = hos_fopen_write(path.c_str(), "wb")) fwrite(r, 8, 6, f), fclose(f);
 }
 /// Whether to prepare (and why), and what for: *now, written once the prepare is done. No seed: the translator alone, as before.
 /// *hash_ms: how long the seed's hash took (0: not taken). now->warmed is the record's, for this translator: the caller's to renew
@@ -7548,7 +7549,7 @@ bool prepare_run(void (*progress)(size_t done, size_t total), bool background, b
                 fclose(f);
                 logf("vk: the last start did not finish the driver's part of the shaders: left out");
             } else {
-                if (FILE* w = fopen(warming.c_str(), "wb")) fclose(w);
+                if (FILE* w = hos_fopen_write(warming.c_str(), "wb")) fclose(w);
                 if (!warm_libraries(progress)) {
                     remove(warming.c_str());
                     return false;
@@ -7580,7 +7581,7 @@ bool prepare_run(void (*progress)(size_t done, size_t total), bool background, b
         warm = warm_cs = false;
         logf("vk: the last start did not finish the driver's part of the shaders: left out");
     } else if (warm || warm_cs) {
-        if (FILE* w = fopen(warming.c_str(), "wb")) fclose(w);
+        if (FILE* w = hos_fopen_write(warming.c_str(), "wb")) fclose(w);
     }
     pcache_init();   // (once, here: the workers below build compute pipelines into it)
     std::atomic<size_t> next{0}, done{0}, made{0}, libs{0}, variants{0}, asking{0}, capped{0};
@@ -7731,7 +7732,7 @@ void precompile_run(void (*progress)(size_t done, size_t total)) {
         }
         logf("vk: the last start did not get through the precompile (closed, or it crashed there): trying it once more");
     }
-    if (FILE* f = fopen(running.c_str(), "wb")) fprintf(f, "%d\n", ended_inside + 1), fclose(f);
+    if (FILE* f = hos_fopen_write(running.c_str(), "wb")) fprintf(f, "%d\n", ended_inside + 1), fclose(f);
     struct Done { const std::string& path; ~Done() { remove(path.c_str()); } } done_marker{running};
     pcache_init();
     std::vector<std::unique_ptr<PipeNote>> notes = pipe_notes_read();
@@ -8521,7 +8522,7 @@ void pipeline_cache_save(bool force) {
                 std::vector<uint8_t> data(n);
                 if (vkGetPipelineCacheData(dev.device, pcache, &n, data.data()) == VK_SUCCESS) {
                     const std::string tmp = pcache_path + ".tmp";
-                    if (FILE* f = fopen(tmp.c_str(), "wb")) {
+                    if (FILE* f = hos_fopen_write(tmp.c_str(), "wb")) {
                         bool ok = fwrite(data.data(), 1, n, f) == n;
                         ok = fclose(f) == 0 && ok;   // (its last bytes go to the disk at the close)
                         // (only a file in place counts as saved: a failed write is tried again at the next save)

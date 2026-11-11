@@ -37,6 +37,7 @@
 #include "vk_menu_keys.h"   // (which gamepad buttons confirm and go back: those A and B are bound to)         // (how it looks: Dear ImGui, vk_imgui.h)
 #include "vk_dlss.h"
 #include "../../host/hos_wide_size.h"   // (the widescreen picture's size, as host/hos_main.c works it out)
+#include "../../host/hos_fopen_write.h"   // (hookshot_options.ini: not through a link)
 #include "vk_fsr3.h"      // (the Upscaler row: whether AMD FSR 3.1 runs on this GPU)
 #include "vk_fsr3fi.h"    // (the Frame generation row: whether FSR 3.1 makes the frame)
 #include "vk_fsr4.h"
@@ -1281,7 +1282,7 @@ void save() {
         }
         fclose(f);
     }
-    if (FILE* f = fopen(ini_path().c_str(), "w")) {
+    if (FILE* f = hos_fopen_write(ini_path().c_str(), "w")) {
         for (const Row& r : rows) {
             if (r.value == &opts.output_res) {   // (the size itself: host/nn_applet.c reads it)
                 const Out o = output_at(*r.value);

@@ -10,6 +10,7 @@
                 HOS_NVN_CONTINUE=1 (go on past nvnBootstrapLoader). */
 #include "hos.h"
 #include "hos_paths.h"
+#include "hos_fopen_write.h"   /* (the saves note and moved saves: not through a link) */
 #include "hos_wide_size.h"   /* (the widescreen picture's size, shared with the Insert menu) */
 #include "../gpu/vk/vk_api.h"
 #include "../gpu/vk/oot_cheat_items.h"
@@ -262,7 +263,7 @@ static int is_dir(const char *p) {
 }
 static int copy_tree(const char *from, const char *to) {
     if (!is_dir(from)) {
-        FILE *in = fopen(from, "rb"), *out = in ? fopen(to, "wb") : NULL;
+        FILE *in = fopen(from, "rb"), *out = in ? hos_fopen_write(to, "wb") : NULL;
         int ok = in && out;
         char buf[1 << 16];
         for (size_t n; ok && (n = fread(buf, 1, sizeof buf, in)) > 0;) ok = fwrite(buf, 1, n, out) == n;
@@ -348,7 +349,7 @@ static const char *saves_dir(const char *beside) {
         char note[MAX_PATH];
         const char *sep = strrchr(beside, SEP);
         snprintf(note, sizeof note, "%.*s" SEP_S "saves-moved.txt", sep ? (int)(sep - beside) : 0, beside);
-        FILE *f = fopen(note, "w");
+        FILE *f = hos_fopen_write(note, "w");
         if (f) {
             fprintf(f, "Hookshot's saves are now in\n%s\n\nThey moved there from the user folder that was here.\n", dir);
             fclose(f);

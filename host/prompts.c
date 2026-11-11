@@ -21,6 +21,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include "../gpu/vk/vk_api.h"   /* (HOS_SW_*, HOS_PAD_*, HOS_BIND_PAD) */
+#include "hos_fopen_write.h"
 
 int hos_binding(int set, int button, int slot);   /* nn_hid.c */
 int hos_sdl_pads(uint64_t *buttons, int32_t stick[4]);   /* pad_sdl.c */
@@ -180,7 +181,7 @@ static int zstd_block(FILE *o, const uint8_t *data, size_t k, int last) {
 
 /* data as a zstd frame of raw blocks (zstd_head) */
 static int write_zstd_raw(const char *path, const uint8_t *data, size_t n) {
-    FILE *f = fopen(path, "wb");
+    FILE *f = hos_fopen_write(path, "wb");
     if (!f) return 0;
     uint8_t head[10];
     zstd_head(head, n);
@@ -271,7 +272,7 @@ static int write_patched(const char *game, const char *out, const char *keypath,
     snprintf(want, sizeof want, "%016llx", (unsigned long long)h);
     int ok = !strcmp(keyline, want) && GetFileAttributesA(out) != INVALID_FILE_ATTRIBUTES;
     if (!ok) {   /* the game's file through, the chosen runs written over it, out as raw zstd blocks */
-        FILE *in = fopen(game, "rb"), *o = fopen(out, "wb");
+        FILE *in = fopen(game, "rb"), *o = hos_fopen_write(out, "wb");
         uint8_t *chunk = (uint8_t *)malloc(131072);
         ok = in && o && chunk;
         if (ok) {
@@ -306,7 +307,7 @@ static int write_patched(const char *game, const char *out, const char *keypath,
         if (in) fclose(in);
         if (o) ok &= fclose(o) == 0;
         free(chunk);
-        if (ok && (f = fopen(keypath, "w"))) {
+        if (ok && (f = hos_fopen_write(keypath, "w"))) {
             fputs(want, f);
             fclose(f);
         }
