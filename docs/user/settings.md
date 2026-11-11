@@ -75,6 +75,9 @@ The first time you start the game, Hookshot picks a preset for your card: **Mini
 a card with about 4 GB, **Low (6GB)** on a card with about 6 GB, and **Custom** otherwise. On those small cards it
 keeps the Docked profile, and Minimum starts with the scaling filter and sharpness off.
 
+On **Minimum (4GB)**, when your graphics driver gives the game 4.5 GB of video memory or less, large textures also
+load at a lower resolution, to fit. Other presets keep full texture detail.
+
 ## Graphics
 
 ![The Graphics tab of the settings menu](../images/user/menu-graphics.png)
@@ -82,34 +85,67 @@ keeps the Docked profile, and Minimum starts with the scaling filter and sharpne
 For more on the Upscaler, Render resolution and Frame generation, and how to pick between them, see
 [upscaling](upscaling.md).
 
+The tab groups its rows under headings, in this order: Resolution and upscaling, Frame generation and latency,
+Screen, HDR, Detail, and GPU and memory (the rows to change when something is wrong).
+
 | Setting | Choices | Default | What it does |
 |---|---|---|---|
 | Quality preset | Custom, Minimum (4GB), Low (6GB), Balanced (8GB), High (12GB), Ultra (16GB+) | Custom | Sets the scaling rows and the video memory limit for a card with that much memory. See [Quality presets](#quality-presets) |
+
+**Resolution and upscaling**
+
+| Setting | Choices | Default | What it does |
+|---|---|---|---|
+| Output resolution | 1920x1080, 2048x1152 (game's), 2560x1440, 3840x2160, 5120x1440, 5120x2880 | 2048x1152 (game's) | The size of the game's whole picture, menus and HUD included, before it's fitted to your window. Pick your screen's size for the sharpest result. Docked profile only. Applies after a restart |
+| Profile | Docked, Handheld | Docked | Runs the game as the Switch does when docked, or in handheld mode. **Handheld** draws at 1536x864, softer but lighter on the card. Applies after a restart |
+| Upscaler | Game's own, NVIDIA DLSS, AMD FSR 3.1, AMD FSR 4, Off (no upscaling) | Game's own | What enlarges the 3D scene to the output resolution. **Game's own** is the Switch's upscaler. **NVIDIA DLSS** needs an NVIDIA RTX card and a build with DLSS. **AMD FSR 3.1** runs on most cards. **AMD FSR 4** needs a supported AMD card and a build with FSR 4. **Off** just stretches the scene: fastest, but rough edges. Only choices your PC can run appear |
+| DLSS model | Transformer (K), Transformer 2 (M), Transformer 2 (L), NVIDIA default | Transformer (K) | Which version of DLSS draws the picture. **K** is the most tested; **M** is sharper for a little more GPU time; **L** suits the lowest render resolutions; **NVIDIA default** lets the driver choose. Shown only where DLSS runs |
+| Render resolution | Depends on the Upscaler (see below) | Auto (dynamic) | The size the 3D scene is drawn at, as a share of the output. The Upscaler fills in the rest. Lower is faster and softer. **Auto** lets the game lower it when the card is busy, as on the Switch |
+| Sharpness | 0% to 100%, in steps of 10 | 0% | Sharpens the picture as it goes to the window. Too much leaves halos around edges. DLSS looks softer than the game's own upscaler, so around 80% suits it |
+
+**Frame generation and latency**
+
+| Setting | Choices | Default | What it does |
+|---|---|---|---|
+| Frame generation | Off, Auto, 2x to 8x | Off | Adds frames between the game's own for smoother motion, at a little extra input delay. Fast motion and camera cuts can show flaws. **Auto** adds only as many as your display's refresh rate needs. **2x** adds one frame between each pair, **3x** two, and so on |
+| Frame generation by | Auto, Built-in | Auto | Who makes the extra frames at 2x and above. **Auto** uses NVIDIA DLSS Frame Generation on an RTX 40 series or newer card while DLSS, FSR 3.1 or FSR 4 is the Upscaler, and Hookshot's built-in generator otherwise. **Built-in** always uses Hookshot's. Changes at once |
+| Frame pacing | Off, On | Off | **On** shows frames at an even interval: less stutter, with up to one frame of extra delay. **Off** shows each one as soon as it's ready |
+| Game frame rate cap | 60 (the console's), 90, 120, 144, 165, 240, Uncapped | 60 (the console's) | The most frames the game itself draws each second. Frame generation adds frames on top. Above 60 is experimental: the game keeps the right speed, but some cutscenes and bosses (such as Gohma) can misbehave. **Uncapped** runs as fast as your PC can, still limited by the display with V-Sync on. Applies after a restart |
+| NVIDIA Reflex | Off, On, On + Boost | Off | Lowers input delay by starting each frame as late as possible. **On + Boost** also keeps the card's clocks up. Works with frame generation. Shown only on NVIDIA cards whose driver supports it |
+| AMD Anti-Lag 2 | Off, On | Off | Lowers input delay by starting each frame as late as possible. Not used while frame generation is on. Shown only on AMD cards whose driver supports it |
+
+**Screen**
+
+| Setting | Choices | Default | What it does |
+|---|---|---|---|
 | Fullscreen | Off, On | Off | Fills the whole screen with the game, without a window border. **F11** does the same |
-| GPU device | Auto, or each graphics card by name | Auto | Which graphics card runs the game, for PCs with more than one. Auto picks the best dedicated card. Applies after a restart |
 | V-Sync | Auto, On, Off | Auto | Whether each frame waits for the display's refresh. **Auto** avoids tearing without the wait where the driver allows it. **On** never tears, and runs at most at the display's rate. **Off** has the least delay but can tear. Changes at once |
+| Window scaling filter | Off, Catmull-Rom, Lanczos | Off | How the finished picture is fitted to your window when their sizes differ. **Catmull-Rom** is sharper than Off; **Lanczos** sharper still, but can ring around edges. Shows *Not needed* when the window already matches the output resolution |
+| Aspect ratio | 16:9, Monitor's shape | Monitor's shape | **Monitor's shape** widens or narrows the view to fit a screen that isn't 16:9, such as 21:9, 32:9, 4:3 or 16:10; the HUD stays in the middle 16:9. **16:9** keeps the game's own shape. Applies after a restart |
+| Ultrawide menus | Full width; Centred, blurred sides; Centred, black bars | Centred, blurred sides | With the Aspect ratio at Monitor's shape, how the pause, item and map menus fill a wide screen: stretched across it, in the middle with the game blurred at the sides, or in the middle with black bars. Loading screens and movies get the same sides. Changes at once |
+
+**HDR**
+
+| Setting | Choices | Default | What it does |
+|---|---|---|---|
 | HDR | Off, Expanded, Native (the game's) | Off | HDR output on an HDR display. On Windows, turn on **Use HDR** in the display settings first. **Expanded** brightens the normal picture into HDR. **Native** uses the game's own HDR |
 | HDR paper white | 80 to 400 nits, in steps of 10 | 200 nits | How bright white looks with HDR on. Around 200 suits a normal room; go higher in a bright one. Shown only with HDR on |
 | HDR peak brightness | 400 to 4000 nits, in steps of 100 | 1000 nits | The brightest highlights with HDR on. Set it to your display's peak brightness. Shown only with HDR on |
 | HDR contrast | 50% to 200%, in steps of 5 | 100% | Above 100%, deeper shadows and brighter highlights; below, a flatter picture. Works with both Expanded and Native. Shown only with HDR on |
 | HDR tone mapper | Vanilla, PsychoV35 | Vanilla | With HDR set to Native, how the scene's brightness fits your display. **Vanilla** is the game's own curve. **PsychoV35** (from RenoDX) keeps the same mid-grey and lets highlights roll off into the peak brightness with their colour kept. DLSS, FSR and the game's TAAU don't use it yet |
-| Game frame rate cap | 60 (the console's), 90, 120, 144, 165, 240, Uncapped | 60 (the console's) | The most frames the game itself draws each second. Frame generation adds frames on top. Above 60 is experimental: the game keeps the right speed, but some cutscenes and bosses (such as Gohma) can misbehave. **Uncapped** runs as fast as your PC can, still limited by the display with V-Sync on. Applies after a restart |
-| NVIDIA Reflex | Off, On, On + Boost | Off | Lowers input delay by starting each frame as late as possible. **On + Boost** also keeps the card's clocks up. Works with frame generation. Shown only on NVIDIA cards whose driver supports it |
-| AMD Anti-Lag 2 | Off, On | Off | Lowers input delay by starting each frame as late as possible. Not used while frame generation is on. Shown only on AMD cards whose driver supports it |
-| Output resolution | 1920x1080, 2048x1152 (game's), 2560x1440, 3840x2160, 5120x1440, 5120x2880 | 2048x1152 (game's) | The size of the game's whole picture, menus and HUD included, before it's fitted to your window. Pick your screen's size for the sharpest result. Docked profile only. Applies after a restart |
-| Upscaler | Game's own, NVIDIA DLSS, AMD FSR 3.1, AMD FSR 4, Off (no upscaling) | Game's own | What enlarges the 3D scene to the output resolution. **Game's own** is the Switch's upscaler. **NVIDIA DLSS** needs an NVIDIA RTX card and a build with DLSS. **AMD FSR 3.1** runs on most cards. **AMD FSR 4** needs a supported AMD card and a build with FSR 4. **Off** just stretches the scene: fastest, but rough edges. Only choices your PC can run appear |
-| DLSS model | Transformer (K), Transformer 2 (M), Transformer 2 (L), NVIDIA default | Transformer (K) | Which version of DLSS draws the picture. **K** is the most tested; **M** is sharper for a little more GPU time; **L** suits the lowest render resolutions; **NVIDIA default** lets the driver choose. Shown only where DLSS runs |
-| VRAM budget | Auto, 3.6 GB, 4.8 GB, 6 GB, 7.5 GB, 9 GB, 11 GB | Auto | How much video memory the game's textures may use. Lower it if the game stutters after you've played a while. A preset sets it; the Minimum preset uses 2.2 GB |
-| Render resolution | Depends on the Upscaler (see below) | Auto (dynamic) | The size the 3D scene is drawn at, as a share of the output. The Upscaler fills in the rest. Lower is faster and softer. **Auto** lets the game lower it when the card is busy, as on the Switch |
-| Frame generation | Off, Auto, 2x to 8x | Off | Adds frames between the game's own for smoother motion, at a little extra input delay. Fast motion and camera cuts can show flaws. **Auto** adds only as many as your display's refresh rate needs. **2x** adds one frame between each pair, **3x** two, and so on |
-| Frame generation by | Auto, Built-in | Auto | Who makes the extra frames at 2x and above. **Auto** uses NVIDIA DLSS Frame Generation on an RTX 40 series or newer card while DLSS, FSR 3.1 or FSR 4 is the Upscaler, and Hookshot's built-in generator otherwise. **Built-in** always uses Hookshot's. Changes at once |
-| Frame pacing | Off, On | Off | **On** shows frames at an even interval: less stutter, with up to one frame of extra delay. **Off** shows each one as soon as it's ready |
-| Window scaling filter | Off, Catmull-Rom, Lanczos | Off | How the finished picture is fitted to your window when their sizes differ. **Catmull-Rom** is sharper than Off; **Lanczos** sharper still, but can ring around edges. Shows *Not needed* when the window already matches the output resolution |
-| Sharpness | 0% to 100%, in steps of 10 | 0% | Sharpens the picture as it goes to the window. Too much leaves halos around edges. DLSS looks softer than the game's own upscaler, so around 80% suits it |
+
+**Detail**
+
+| Setting | Choices | Default | What it does |
+|---|---|---|---|
 | Anisotropic filtering | Game's, 2x, 4x, 8x, 16x | 16x | Keeps textures sharp on surfaces seen at an angle, such as the ground ahead. **Game's** is the Switch's own, which is blurrier |
-| Profile | Docked, Handheld | Docked | Runs the game as the Switch does when docked, or in handheld mode. **Handheld** draws at 1536x864, softer but lighter on the card. Applies after a restart |
-| Aspect ratio | 16:9, Monitor's shape | Monitor's shape | **Monitor's shape** widens or narrows the view to fit a screen that isn't 16:9, such as 21:9, 32:9, 4:3 or 16:10; the HUD stays in the middle 16:9. **16:9** keeps the game's own shape. Applies after a restart |
-| Ultrawide menus | Full width; Centred, blurred sides; Centred, black bars | Centred, blurred sides | With the Aspect ratio at Monitor's shape, how the pause, item and map menus fill a wide screen: stretched across it, in the middle with the game blurred at the sides, or in the middle with black bars. Loading screens and movies get the same sides. Changes at once |
+
+**GPU and memory**
+
+| Setting | Choices | Default | What it does |
+|---|---|---|---|
+| GPU device | Auto, or each graphics card by name | Auto | Which graphics card runs the game, for PCs with more than one. Auto picks the best dedicated card. Applies after a restart |
+| VRAM budget | Auto, 3.6 GB, 4.8 GB, 6 GB, 7.5 GB, 9 GB, 11 GB | Auto | How much video memory the game's textures may use. Lower it if the game stutters after you've played a while. A preset sets it; the Minimum preset uses 2.2 GB |
 | Mesh shaders | Automatic, Native, Compute | Automatic | How the card draws much of the scenery. **Automatic** uses the card's mesh shaders where it has them. **Compute** works on every card and is usually a little slower; try it if objects are missing or the game crashes. Applies after a restart |
 
 **Render resolution choices.** The steps depend on the Upscaler. Each shows the size it draws at.
@@ -144,6 +180,7 @@ FSR 4 its Native AA. It's the sharpest and the heaviest choice. At 100%, FSR 3.1
 | FPS counter position | Top right, Top left, Bottom right, Bottom left | Top right | The corner the FPS counter sits in. While the menu is open it shows at the top right |
 | Menu size | Small, Medium, Large | Medium | How large this menu, the FPS counter and the start-up screen are. **Small** suits a desk, **Large** a TV across the room |
 | Game speed | Per frame, Real time | Real time | How the game keeps time when it runs below 60 fps. **Real time** keeps normal speed down to 15 fps. **Per frame** slows the game down whenever the frame rate drops |
+| Field of view | 50% to 150%, in steps of 5 | 100% | How much of the world you see. 100% is the game's own view; higher is wider, lower is closer. Changes at once during gameplay. Cutscenes, the HUD and movies keep their own view |
 | Text speed | Normal, 2x, 4x, Instant | Normal | How fast dialogue and other messages print. **Instant** shows each page at once |
 | Text size | Original, 110%, 125%, 150%, 175% | Original | How large dialogue, Navi's text and signs are drawn |
 | Microphone | Off, Default, or each microphone by name | Default | What the game hears when you use its microphone option (playing an instrument or humming). **Default** is your system's recording device. On Windows, desktop apps must be allowed to use the microphone (Settings, Privacy & security). An unplugged microphone stays chosen, and Default stands in until it's back |

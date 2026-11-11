@@ -60,6 +60,7 @@ namespace mkwvk {
 extern std::atomic<bool> movie_networks_slow;   // (vk_draw.cpp: the movie networks left out, issue 109)
 int64_t presents_now;   // (the presents so far, for SlowWatch)
 void hang_watch_start();   // (EvilOOT, vk_hangdump.cpp: RX_VK_HANG_DUMP)
+void gpu_hang_watch_start();   // (below: a GPU that stops finishing work, reported and ended)
 struct CondNote { int64_t present; uint64_t addr, x, y; int mode; bool on; };   // (the last render conditions, for a dark frame)
 CondNote cond_ring[1 << 15];
 uint32_t cond_ring_at = 0;
@@ -67,6 +68,11 @@ namespace {
 
 // ---- submissions: a timeline semaphore; value n = the n-th submit done ----
 VkSemaphore timeline = VK_NULL_HANDLE;
+std::atomic<uint64_t> timeline_sent{0};   // (the highest value a submission already in the queue signals: gpu_hang_watch_start)
+void note_timeline_sent(uint64_t v) {
+    uint64_t was = timeline_sent.load(std::memory_order_relaxed);
+    while (v > was && !timeline_sent.compare_exchange_weak(was, v, std::memory_order_relaxed)) {}
+}
 // ---- (hookshot) recordings by number: a second timeline, signalled at the end of every recording with its number, and the
 // recording each submission was finished in. The timeline above is signalled only as far as no older submission is stopped
 // at a wait, and every NVN queue's submissions share its numbers: a fence taken on one queue waited for the other queues'
@@ -220,6 +226,7 @@ void queue_flush_locked() {   // (dev.present_mu held)
     static int failures;
     if (res != VK_SUCCESS && failures++ < 8) logf("vk: batched submit %llu failed (%d)", (unsigned long long)batch_next, (int)res);
     if (res == VK_ERROR_DEVICE_LOST) device_lost();
+    if (res == VK_SUCCESS && pend.any_signal) note_timeline_sent(pend.signal);
     batch_flushed = batch_next;
     st_flushes++, st_batched_cbs += (int64_t)pend.cbs.size();
     st_reason[flush_reason]++;
@@ -414,6 +421,7 @@ void submit_recording(Recording& r, bool signal_value = true, uint64_t signal_at
     static int failures;
     if (res != VK_SUCCESS && failures++ < 8) logf("vk: submit %llu failed (%d)", (unsigned long long)r.value, (int)res);
     if (res == VK_ERROR_DEVICE_LOST) device_lost();
+    if (res == VK_SUCCESS && signal_value) note_timeline_sent(signal.value);
 }
 
 // ---- NVN state (the draw path's, vk_state.h) ----
@@ -2281,6 +2289,32 @@ bool tex_pages_any(uint64_t gpu, uint64_t size) {
 }
 void texture_created_of(const nvn_tex* t) { tex_pages_add(t, +1); }
 uint64_t fence();
+/// (hookshot) invalidate's wait for a write-back's value, at most RX_VK_READBACK_WAIT_MS (default 250; 0: no limit, as before).
+/// On the Steam Deck (RADV, no buffer mirrors, queues replayed in submit order) the game's main thread and one of its jobs
+/// waited here, right after Kokiri Forest's save loaded, for a value the timeline never reached while they waited (it had been
+/// submitted; the GPU stayed one value short), and the game stopped for good: 2 of 8 starts, 4 of 4 with
+/// RX_VK_CAPTURE_WAIT=0. Past the limit the CPU reads what memory holds, as the capture's wait does (vk_timeline_wait), and
+/// the first times are logged with how far the timeline and the submits had got: 6-8 a start, all in the save's load, and no
+/// start stopped (0 of 4). True when reached
+bool readback_wait_value(uint64_t v) {
+    static const int64_t limit_ms = getenv("RX_VK_READBACK_WAIT_MS") ? atoll(getenv("RX_VK_READBACK_WAIT_MS")) : 250;
+    if (limit_ms <= 0) {
+        wait_value(v);
+        return true;
+    }
+    queue_flush_for(FR_VALUE);
+    VkSemaphoreWaitInfo wi{VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO};
+    wi.semaphoreCount = 1;
+    wi.pSemaphores = &timeline;
+    wi.pValues = &v;
+    if (vkWaitSemaphores(dev.device, &wi, (uint64_t)limit_ms * 1000000ull) != VK_TIMEOUT) return true;
+    static std::atomic<int> logged{0};
+    if (logged++ < 8)
+        logf("vk: a readback's wait for write-back %llu timed out after %lld ms (done %llu, submitted %llu, handed out %llu)",
+             (unsigned long long)v, (long long)limit_ms, (unsigned long long)completed(), (unsigned long long)pushed.load(),
+             (unsigned long long)q_values.load());
+    return false;
+}
 void invalidate(uint64_t gpu, uint64_t size) {
     static const bool log_inv = env_on("RX_VK_LOG_INVALIDATE");
     static std::atomic<int> logged{0};
@@ -2343,7 +2377,7 @@ void invalidate(uint64_t gpu, uint64_t size) {
                 int ok = 0;
                 if (!(unforced && wait_recorded(v, UINT64_MAX, &ok))) {
                     if (unforced && replay_behind()) wait_queue_empty();   // (not recorded whole: as before)
-                    wait_value(v);
+                    readback_wait_value(v);
                 }
                 w = true;
             }
@@ -2639,11 +2673,55 @@ uint64_t vk_retirement_value() {
 /// submission completed again, so no capture or staging arena was let go, and system memory filled until the window was
 /// closed (issue 1275: captures kept 25 -> 6527, staging 256 -> 1408 MB). Now the report once (a thread that sees the loss
 /// too waits for it, instead of ending the process before it is written), then the process ends as replay_fatal does
-[[noreturn]] void device_lost() {
+[[noreturn]] void device_lost(const char* why) {
     static std::once_flag once;
     std::call_once(once, checkpoints_report);
-    replay_fatal("the GPU device was lost (VK_ERROR_DEVICE_LOST): the driver stopped or reset the GPU, and nothing sent "
-                 "to it runs any more (on Linux, dmesg or journalctl -k around this time names the reset)");
+    replay_fatal(why ? why
+                     : "the GPU device was lost (VK_ERROR_DEVICE_LOST): the driver stopped or reset the GPU, and nothing sent "
+                       "to it runs any more (on Linux, dmesg or journalctl -k around this time names the reset)");
+}
+
+/// (hookshot) A GPU hang the driver never reports as a lost device. RTX 4070 Ti, NVIDIA 595.99.02, Linux, Hyrule Castle: the
+/// kernel's Xid 109 (CTX SWITCH TIMEOUT) ended the game's GPU context, the timeline stopped 4 short of what was sent, and
+/// from then on every wait came back VK_TIMEOUT or never came back, none VK_ERROR_DEVICE_LOST: device_lost() did not run,
+/// the game froze, and the log had no report of what the GPU was running. A thread reads the timeline once a second from the first present: a lost device
+/// it sees goes to device_lost(), and work sent to the queue that makes no progress at all for RX_VK_GPU_HANG_SEC
+/// seconds (default 30) is taken as a hang and goes there too. A window the system stops presenting can hold the queue
+/// that long as well (the present waits for its image): RX_VK_GPU_HANG_SEC=0 logs the stall and lets the game wait.
+void gpu_hang_watch_start() {
+    static std::atomic<bool> started{false};
+    if (!timeline || started.exchange(true)) return;
+    const char* e = getenv("RX_VK_GPU_HANG_SEC");
+    const int limit = e ? std::max(0, atoi(e)) : 30;
+    // (atoi reads a typo as 0, which turns the exit off: the value it settled on is logged)
+    if (limit) logf("vk: GPU hang watch: work that finishes nothing for %d s ends the game (RX_VK_GPU_HANG_SEC)", limit);
+    else logf("vk: GPU hang watch: a stall is only logged (RX_VK_GPU_HANG_SEC=%s)", e);
+    std::thread([limit] {
+        SetThreadDescription(GetCurrentThread(), L"mkw_vk gpu hang watch");
+        uint64_t last = 0;
+        int still = 0;
+        for (;;) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            uint64_t done = 0;
+            if (vkGetSemaphoreCounterValue(dev.device, timeline, &done) == VK_ERROR_DEVICE_LOST) device_lost();
+            const uint64_t sent = timeline_sent.load(std::memory_order_relaxed);
+            if (done >= sent || done != last) {
+                last = done, still = 0;
+                continue;
+            }
+            still++;
+            if (still == 10 || still % 30 == 0)
+                logf("vk: the GPU has finished nothing for %d s: the timeline at %llu, %llu sent (RX_VK_GPU_HANG_SEC=%d)",
+                     still, (unsigned long long)done, (unsigned long long)sent, limit);
+            if (limit && still >= limit) {
+                static char why[256];
+                std::snprintf(why, sizeof why, "the GPU hung: no submission finished in %d s, and the driver never reported the "
+                              "device lost (on Linux, dmesg or journalctl -k around this time names the fault, an Xid on NVIDIA)", still);
+                logf("vk: GPU hang: the timeline at %llu, %llu sent", (unsigned long long)done, (unsigned long long)sent);
+                device_lost(why);
+            }
+        }
+    }).detach();
 }
 
 bool write_png(const char* path, const uint8_t* rgba, uint32_t w, uint32_t h) {
@@ -3184,7 +3262,7 @@ void do_present(const nvn_tex* t, const int crop[4]) {
         presents++;
         presents_now = presents;
         wide_sides_tick();
-        if (presents == 1) hang_watch_start();
+        if (presents == 1) hang_watch_start(), gpu_hang_watch_start();
         {   // (EvilBoyce, diagnostics) RX_VK_WATCH_CPU=<present>:<gpu address>[,...] (hex addresses): from that present on, the
             // CPU's writes to those 4 KB pages logged with the writer's stack (host page watch: 12 reports)
             static bool armed = false;
@@ -4020,7 +4098,7 @@ void present_finish(VkResult res, bool on_presenter) {
 }
 }  // namespace
 
-// (hookshot) The presenter thread (on by default; RX_VK_PRESENT_THREAD=0: off). With NVIDIA's driver on Wayland, vkQueuePresentKHR waits
+// (hookshot) The presenter thread (RX_VK_PRESENT_THREAD=1; off by default until the swapchain's external sync and the drain are fixed). With NVIDIA's driver on Wayland, vkQueuePresentKHR waits
 // on the CPU until the frame's copy into the window's image is done on the GPU, after all of the frame's work: 2.4 ms a frame of the
 // game's presentation thread on an RTX 3090 in Kokiri Forest (HOS_CHAIN), on the frame's critical path, since the game's main thread
 // waits for that thread's present to return before it starts the next frame's commands. present_image hands the present to a thread
@@ -4132,18 +4210,18 @@ void presenter_loop() {
     }
 }
 bool present_thread_on() {
-    static const bool wanted = [] {
+    static const bool wanted = [] {   // (off by default until the review's swapchain and drain findings are fixed)
         const char* e = getenv("RX_VK_PRESENT_THREAD");
-        return !e || atoi(e) != 0;
+        return e && atoi(e) != 0;
     }();
     // (a queue of its own that presents to this surface: vk_main.cpp; a new surface checks again)
     const bool on = wanted && dev.presenter_queue && dev.presenter_supported;
     static int told = -1;
     if (told != (int)on) {
         told = on;
-        logf("vk: presenter thread: %s", on ? "each present made on a thread and queue of its own once its copy is done (RX_VK_PRESENT_THREAD=0: off)"
+        logf("vk: presenter thread: %s", on ? "each present made on a thread and queue of its own once its copy is done (RX_VK_PRESENT_THREAD=1)"
                                             : wanted ? "no queue of its own that presents to the window: presents on the game's thread"
-                                                     : "off (RX_VK_PRESENT_THREAD=0)");
+                                                     : "off (RX_VK_PRESENT_THREAD=1: on)");
     }
     return on;
 }
@@ -4732,6 +4810,7 @@ void fill_replay_table(MkwVkRenderer& t) {
         if (id == HOS_OPT_TEXT_SIZE) return opts.text_size;
         if (id == HOS_OPT_CAMERA_SPEED) return opts.camera_speed;
         if (id == HOS_OPT_PROMPTS) return opts.prompts;
+        if (id == HOS_OPT_FOV) return opts.fov;
         return id == 0 ? opts.realtime : id == 1 ? menu_is_open() : id == 2 ? resolution_auto() && !temporal_full_scale() : id == 3 ? (temporal_full_scale() ? 10000 : resolution_scale()) : id == 4 ? opts.pad_background : id == 5 ? opts.text_speed : id == 6 ? opts.mouse_native :
                id == 7 ? opts.mouse_sens : id == 8 ? opts.mouse_invert : id == 9 ? opts.rumble : id == 16 ? opts.invert_cam_x : id == 17 ? opts.invert_cam_y : id == HOS_OPT_GYRO ? opts.gyro : id == HOS_OPT_GYRO_SENS_X ? opts.gyro_sens_x : id == HOS_OPT_GYRO_SENS_Y ? opts.gyro_sens_y : id == HOS_OPT_GYRO_INV_X ? opts.gyro_inv_x : id == HOS_OPT_GYRO_INV_Y ? opts.gyro_inv_y : id == HOS_OPT_GYRO_DEADZONE ? opts.gyro_deadzone :
                id == HOS_OPT_DLSS_JITTER_W || id == HOS_OPT_DLSS_JITTER_H || id == HOS_OPT_DLSS_JITTER_PHASES ? jitter_option(id) : 0;

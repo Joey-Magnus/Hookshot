@@ -161,6 +161,7 @@ The upscalers themselves are described in [upscaling](../user/upscaling.md). The
 
 | Switch | Values | What it does |
 |---|---|---|
+| `RX_VK_LOW_VRAM_MIPS` | `0` | Turns off the low-memory texture rule: on the Minimum (4GB) preset, when the driver's budget is at most 4.5 GiB, sampled ASTC textures get a 1024 dimension limit and an 8 MiB threshold for leaving out their top mip levels (otherwise 2048 and 64 MiB). The budget is sampled at the first texture and kept for the session. `RX_VK_TEX_MAX_DIM` and `RX_VK_TEX_SKIP_MB` override the limit and the threshold separately |
 | `RX_VK_VRAM_MB` | MB | **Player.** The texture cache's budget. Default: 45% of what the driver allows on a card with 8.5 GB or less, 70% on a larger one, at most 6 GB; at most 2560 MB on an integrated GPU; 4096 when the driver does not say. A smaller Quality preset can set a lower budget |
 | `RX_VK_ASTC_RGBA8` | `0`, `1` | **Player.** ASTC textures decoded to RGBA8 for this run, over the Debug tab's ASTC as RGBA8 row. While it is set, the row shows "Set by RX_VK_ASTC_RGBA8" |
 | `RX_VK_WB_MAX_KB` | KB | **Player.** GPU-written bindings larger than this are not copied back to guest memory. `1024` keeps the small results the CPU reads (the exposure meter) and skips the large culling lists and per-frame buffers, which can lift the frame rate where write-backs are heavy. `0` or unset: every written binding is copied |
@@ -180,6 +181,7 @@ The upscalers themselves are described in [upscaling](../user/upscaling.md). The
 
 | Switch | Values | What it does |
 |---|---|---|
+| `RX_VK_FETCH_BOUNDS`, `RX_VK_NAN_BITS`, `RX_VK_GATHER_OFFSET` | `0`, `1` | The shader translation's vendor and driver workarounds (`gpu/vk/vk_vendor.h`) off or on for one run, whatever the GPU; the log's `vk: vendor fixes` line says which are on. By default: out-of-bounds texel fetches answered with 0 on every GPU but NVIDIA's; NaN tests on a value's bits on AMD's older Windows shader compiler (RX 5000 and RX 6000); gathers nudged by 1/512 of a texel on AMD's and Intel's drivers |
 | `RX_VK_GM_LOOP` | `0`, `1` | How a global memory access's storage-buffer tables are searched: in a loop (`1`) or written out entry by entry (`0`). On by default on Intel, whose compiler didn't finish the culling programs with the entries written out |
 | `RX_VK_MESH_NOCULL` | key prefixes | **Player.** Turns off culling in the task shaders whose native code key starts with one of the prefixes: every meshlet is drawn and the rasterizer clips what is off screen. On a Steam Deck, `2c56dc1006942f74` avoids the GPU hang in Kokiri Forest and the Great Deku Tree without leaving anything out. It costs some GPU time, so it is off unless set. The log says "culling off, every meshlet drawn" for each task shader it changed |
 | `RX_VK_SKIP_CODE` | key prefixes | **Player.** Leaves out the draws of every program with a stage whose native code key starts with one of the prefixes (the keys the log prints after "its code:"). A workaround: on a Steam Deck `2c56dc1006942f74` also avoids the hang, but the models those task + mesh programs draw are missing. Prefer `RX_VK_MESH_NOCULL` |
@@ -205,7 +207,8 @@ The upscalers themselves are described in [upscaling](../user/upscaling.md). The
 | `RX_VK_HANG_DUMP` | a file | Windows: every thread's stack written to the file once no frame was shown for `RX_VK_HANG_SEC` seconds |
 | `RX_VK_HANG_SEC` | seconds, at least 5 | Default 20 |
 | `RX_VK_ASYNC` | `1` | The replay on a thread of its own instead of the game's submitting thread |
-| `RX_VK_PRESENT_THREAD` | `0` | Off: each present is made on the game's thread. On by default where the device has a second queue that can present (a second queue of the replay's family, else a compute family's): the present goes to a thread and queue of its own once the frame's copy into the window is done, and the game's thread carries on. At most one present is outstanding |
+| `RX_VK_PRESENT_THREAD` | `1` | On (off by default: the game's thread presents). Where the device has a second queue that can present (a second queue of the replay's family, else a compute family's), each present goes to a thread and queue of its own once the frame's copy into the window is done, and the game's thread carries on. At most one present is outstanding |
+| `RX_VK_GPU_HANG_SEC` | `<s>` | GPU work that finishes nothing for this long (default 30) counts as a hang: the lost-device report, then the game ends. `0`: the stall is logged and the game waits |
 | `RX_BACKEND` | `vulkan`, or another name | Unset or `vulkan`: `hookshot_vk.dll`. Any other value: the WebGPU renderer, when the executable was built with one |
 | `HOS_TRACE` | `1` | Every Horizon OS call logged, as the `--trace` argument does |
 | `HOS_VCORES` | `0` | No virtual cores |
