@@ -389,9 +389,12 @@ HDR peak brightness show only while HDR is on.
   there is no ghosting, but no anti-aliasing either: edges are jagged, and below 100% the picture is soft. The Render
   resolution then sets the 3D's size alone (Auto, 100%, 75%, 67%, 50%, 33%): lower is faster. RX_VK_DLSS, RX_VK_FSR4 and
   RX_VK_FSR set for a run go over it, as over the row's other choices.
-- **Texture detail with DLSS, FSR 3.1 or FSR 4:** below 75% Render resolution, the world's textures are sampled one finer
-  mip step for each halving of the 3D (the game already does so for its own 75%), so the upscaled picture keeps their
-  detail. `RX_VK_UPSCALE_LOD_BIAS=0` turns it off.
+- **Texture detail with DLSS, FSR 3.1 or FSR 4:** DLSS and DLAA sample the world's textures as NVIDIA's DLSS guide asks:
+  at the output's size and one mip step finer (the game's own bias + log2(3D / output) - 1), which DLSS resolves over its
+  frames, so they keep the detail of the full-size picture instead of the 3D's smaller size. FSR 3.1 and FSR 4 sample them
+  one finer mip step for each halving of the 3D below 75% (the game already does so for its own 75%).
+  `RX_VK_UPSCALE_LOD_BIAS=0` turns it off; `RX_VK_DLSS_LOD_OFFSET=<steps>` sets DLSS's extra step for a run (-1 by default,
+  0 for none, down to -3).
 - **NVIDIA Reflex** Off is the game as without it. `RX_VK_REFLEX_LOG=1` logs the driver's latency timings every 300
   frames while it is on.
 - **AMD Anti-Lag 2** Off is the game as without it. Like Reflex, it is not used while Frame generation is on.
@@ -719,6 +722,8 @@ of its own downloads (`C:\ProgramData\NVIDIA\NGX\models`) before it uses the gam
 A game built with FSR 4 offers **AMD FSR 4** and **AMD FSR 4 Native AA** in the Graphics tab's **Upscaler** row: AMD's
 machine-learned temporal upscaler in place of the game's own, on the same inputs as DLSS (the scene's colour and depth, the
 camera's and the characters' motion, and the camera jitter). Native AA draws the 3D at full size and smooths its edges.
+With HDR on **Native**, it takes the game's HDR colour as linear light, so highlights above the paper white are kept
+(`RX_VK_FSR4_HDR=0`: cut at the paper white, as before).
 Unlike FSR 3.1 (above), it runs AMD's own DLLs, so it needs them beside the game. Choose it in the menu (`dlss=4` or `5`
 in `hookshot_options.ini`, `RX_VK_FSR4=1` or `2` for one run, `RX_VK_FSR4=0` to leave it out).
 
