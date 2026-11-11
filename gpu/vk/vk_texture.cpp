@@ -4109,23 +4109,24 @@ void texture_frame(uint64_t completed) {
     // after a while of play (issues 107 and 386). Kept, up to RX_VK_KEEP_FINALIZED_MB (512 by default; 0:
     // evicted as before), the least recently used beyond that going as before. (Not written back into the memory instead: the game
     // may have put other things there since, and a write-back over scene data once crashed it)
+    // (hookshot) the textures the GPU drew that the game samples again after finalizing them, used in the last 1,800 presents: kept
+    // over the budget up to RX_VK_KEEP_RESAMPLED_MB (512 by default, the most recently used first; 0: evicted as before). Their
+    // total first, as finalized_kept's: keep_resampled.h
+    static const uint64_t keep_resampled_max =
+        (uint64_t)(getenv("RX_VK_KEEP_RESAMPLED_MB") ? std::max(0, atoi(getenv("RX_VK_KEEP_RESAMPLED_MB"))) : 512) << 20;
     static const uint64_t keep_finalized_max =
         (uint64_t)(getenv("RX_VK_KEEP_FINALIZED_MB") ? std::max(0, atoi(getenv("RX_VK_KEEP_FINALIZED_MB"))) : 512) << 20;
     const auto keep_finalized = [&](const Texture* tex) {
         if (!keep_finalized_max || !tex->gpu_written || !tex->released || !tex->first_written ||
             tex->first_written != tex->last_written || tex->bytes > (4ull << 20))
             return false;
-        if (tex->resampled && frame_no - tex->last_frame <= keep_resampled::kMaxUnused) return false;   // (keep_resampled's, below)
+        if (keep_resampled_max && tex->resampled && frame_no - tex->last_frame <= keep_resampled::kMaxUnused)
+            return false;   // (keep_resampled's, below; with it off, kept here as before)
         const auto g = gpu_owned.find(tex->gpu);   // (its storage's range still the one the GPU drew it in)
         if (g == gpu_owned.end() || g->second.first != tex->gpu + std::max<uint64_t>(tex->guest_size, 1)) return false;
         return !drawn_over(tex) && !drawn_over_shifted(tex);
     };
     uint64_t finalized_kept = 0;
-    // (hookshot) the textures the GPU drew that the game samples again after finalizing them, used in the last 1,800 presents: kept
-    // over the budget up to RX_VK_KEEP_RESAMPLED_MB (512 by default, the most recently used first; 0: evicted as before). Their
-    // total first, as finalized_kept's: keep_resampled.h
-    static const uint64_t keep_resampled_max =
-        (uint64_t)(getenv("RX_VK_KEEP_RESAMPLED_MB") ? std::max(0, atoi(getenv("RX_VK_KEEP_RESAMPLED_MB"))) : 512) << 20;
     uint64_t resampled_total = 0;
     if (keep_resampled_max)
         for (auto& [last, tex] : order)

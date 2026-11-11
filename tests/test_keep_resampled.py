@@ -15,7 +15,7 @@ def check_source():
     for needle in ('#include "keep_resampled.h"',
                    "keep_resampled::candidate(overwritten, tex->gpu_written, tex->resampled, frame_no - last) &&",
                    "keep_resampled::keep(tex->bytes, resampled_total, keep_resampled_max)",
-                   "if (tex->resampled && frame_no - tex->last_frame <= keep_resampled::kMaxUnused) return false;",
+                   "if (keep_resampled_max && tex->resampled && frame_no - tex->last_frame <= keep_resampled::kMaxUnused)",
                    "if (tex->gpu_written && tex->released) tex->resampled = true;", 'getenv("RX_VK_KEEP_RESAMPLED_MB")'):
         if needle not in src:
             raise SystemExit("vk_texture.cpp no longer has: " + needle)
