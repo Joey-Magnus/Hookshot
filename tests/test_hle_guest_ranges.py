@@ -9,6 +9,8 @@ now take only spans that lie in the window:
 - nn::os::GenerateRandomBytes, nn::hid's GetNpadStates (at most 16 states) and GetSixAxisSensorStates, the socket Poll
   stand-in, OutputDebugString and nn::diag's log lines (into the log), and the event-name and item-key copies in
   host/hos_main.c and host/oot_menu.c: their text checked to use hos_guest_range on the whole span.
+- the NVN proc names the game asks for (nvnDeviceGetProcAddress, nvnBootstrapLoader): read by guest_name only inside
+  guest memory and up to 255 characters, run here.
 
 python -I -B tests/test_hle_guest_ranges.py [--cc gcc]
 """
@@ -46,7 +48,30 @@ SOURCES = [
     ("oot_menu.c", "static int set_item_key(", "hos_guest_range(buf, n + 1)", "buf + n + 1 > HOS_GUEST_SPACE"),
     ("nn_diag.c", "HLE(_ZN2nn4diag6detail7PutImplERKNS0_11LogMetaDataEPKcm)", "hos_guest_range(ARG(1), n)", "GP(ARG(1))"),
     ("nn_audio.c", "HLE(_ZN2nn5audio16AppendWaveBufferEPNS0_9VoiceTypeEPKNS0_10WaveBufferE)", "wb_in_guest(&checked)", None),
+    ("nvn_native.c", "NV(nvnDeviceGetProcAddress)", "guest_name(U64(1), name, sizeof name)", "GP(U64(1))"),
+    ("nvn_native.c", "HLE(nvnBootstrapLoader)", "guest_name(ARG(0), name, sizeof name)", "GP(ARG(0))"),
 ]
+
+NAME_FIXTURE = r'''#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
+static uint8_t window[0x1000];
+#define HOS_SPACE_END 0x1000ull
+#define GP(a) ((void *)(window + (a)))
+static inline void *hos_guest_range(uint64_t a, uint64_t n) { return a < HOS_SPACE_END && n <= HOS_SPACE_END - a ? GP(a) : (void *)0; }
+%s
+int main(void) {
+    char out[256];
+    strcpy((char *)window + 0x10, "nvnDeviceInitialize");
+    memset(window + 0x800, 'x', 0x800);                     /* (no end before the window's) */
+    memset(window + 0x100, 'y', 300), window[0x100 + 300] = 0;   /* (longer than a name) */
+    const int ok = !strcmp(guest_name(0x10, out, sizeof out), "nvnDeviceInitialize") && !*guest_name(0x800, out, sizeof out) &&
+                   !*guest_name(0x100, out, sizeof out) && !*guest_name(0x5000, out, sizeof out) && !*guest_name(0, out, sizeof out) &&
+                   !strcmp(guest_name(0xFF0, out, sizeof out), "") ;
+    puts(ok ? "PASS: a proc name is read only inside guest memory and up to its 255 characters" : "FAIL: guest_name");
+    return !ok;
+}
+'''
 
 FIXTURE = r'''#include <stdint.h>
 #include <stdio.h>
@@ -103,6 +128,10 @@ def main():
         (tmp / "f.c").write_text(FIXTURE % block(audio, "static int wb_in_guest(const WB *w) {"), encoding="utf-8")
         subprocess.run([a.cc, "-std=c11", "-Wall", "-Werror", str(tmp / "f.c"), "-o", str(tmp / "f")], check=True)
         subprocess.run([str(tmp / "f")], check=True)
+        nvn = host("nvn_native.c")
+        (tmp / "n.c").write_text(NAME_FIXTURE % block(nvn, "static const char *guest_name("), encoding="utf-8")
+        subprocess.run([a.cc, "-std=c11", "-Wall", "-Werror", str(tmp / "n.c"), "-o", str(tmp / "n")], check=True)
+        subprocess.run([str(tmp / "n")], check=True)
 
 
 if __name__ == "__main__":
