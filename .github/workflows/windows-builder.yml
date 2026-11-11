@@ -287,6 +287,47 @@ jobs:
           path: ${{ runner.temp }}/vk-work/sa/build/hookshot_vk.dll
           if-no-files-found: error
 
+  # dav1d for the AV1 movies (issue 2316: the CPM cache's FFmpeg has none), made as scripts/windows/dav1d.sh makes it, with
+  # the same llvm-mingw release on Linux, and checked under Wine by the test of host/dav1d_av1.c. The artifact is the CPM
+  # folder for the builder's cpm part (tools/cpm/dav1d/<version>); the build prints the library's SHA-256, the same on
+  # every run with the same pins.
+  dav1d:
+    name: dav1d for Windows (llvm-mingw)
+    if: github.ref_name != 'builder-parts' && github.ref_name != 'nightly' && github.ref_name != 'rc'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      LLVM_MINGW: llvm-mingw-20261104-ucrt-ubuntu-22.04-x86_64
+      LLVM_MINGW_SHA256: 919380403de87dca3c581c2053230cd298af5e891286628ba0613b7fed370926
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
+          persist-credentials: false
+      - name: Meson, nasm and Wine
+        run: sudo apt-get update && sudo apt-get install -y meson ninja-build nasm wine64
+      - name: llvm-mingw (Linux)
+        run: |
+          curl -fL --retry 5 --retry-delay 10 --proto '=https' -o "$RUNNER_TEMP/llvm.tar.xz" \
+            "https://github.com/mstorsjo/llvm-mingw/releases/download/20261104/$LLVM_MINGW.tar.xz"
+          echo "$LLVM_MINGW_SHA256  $RUNNER_TEMP/llvm.tar.xz" | sha256sum -c -
+          tar -xJf "$RUNNER_TEMP/llvm.tar.xz" -C "$RUNNER_TEMP"
+          echo "HOOKSHOT_MINGW=$RUNNER_TEMP/$LLVM_MINGW" >> "$GITHUB_ENV"
+      - name: dav1d
+        run: scripts/windows/dav1d.sh "$RUNNER_TEMP/cpm"
+      - name: host/dav1d_av1.c on it, under Wine
+        run: |
+          wine=$(command -v wine || command -v wine64 || echo /usr/lib/wine/wine64)
+          export WINEPREFIX="$RUNNER_TEMP/wine" WINEDEBUG=-all
+          python3 -I -B tests/test_dav1d_av1.py --cross "$HOOKSHOT_MINGW/bin/x86_64-w64-mingw32-clang" --run "$wine" \
+            --dav1d "$(ls -d "$RUNNER_TEMP"/cpm/dav1d/*)"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dav1d-windows
+          path: ${{ runner.temp }}/cpm
+          if-no-files-found: error
+
   release:
     name: Release assets
     # (for every release, beside the Linux AppImage. Set vars.CI_RELEASE_WINDOWS to 'false' to upload HookshotBuilder.exe
