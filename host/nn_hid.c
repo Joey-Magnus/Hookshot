@@ -208,7 +208,7 @@ static void mouse_setup(void) {   /* (once: the sensitivity kept in <user>/mouse
         hos_mouse_sens = 1.0;
         char path[512];
         snprintf(path, sizeof path, "%s/mouse_sens.txt", hos_user_dir ? hos_user_dir : "user");
-        FILE *f = fopen(path, "r");
+        FILE *f = hos_fopen_read(path);
         if (f) {
             double v;
             if (fscanf(f, "%lf", &v) == 1 && v > 0) hos_mouse_sens = v;
@@ -529,7 +529,7 @@ static void binds_load(void) {
     FILE *f = NULL;
     if (slash) {
         snprintf(slash + 1, (size_t)(path + MAX_PATH - slash - 1), "hookshot_options.ini");
-        f = fopen(path, "r");
+        f = hos_fopen_read(path);
     }
     int changed = 0;
     if (f) {

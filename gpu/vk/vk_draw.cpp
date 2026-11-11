@@ -719,7 +719,7 @@ std::atomic<size_t> pcache_saved_size{0};
 constexpr int64_t kPcacheMax = int64_t{4} << 30;   // (NVIDIA's after a full preparation: about 1.1 GB)
 std::vector<uint8_t> pcache_file_read(const std::string& path) {
     std::vector<uint8_t> data;
-    FILE* f = fopen(path.c_str(), "rb");
+    FILE* f = hos_fopen_read_binary(path.c_str());
     if (!f) return data;
     _fseeki64(f, 0, SEEK_END);
     const int64_t sz = _ftelli64(f);
@@ -1197,7 +1197,7 @@ bool note_sane(PipeNote& n) {
 }
 std::vector<std::unique_ptr<PipeNote>> pipe_notes_read() {
     std::vector<std::unique_ptr<PipeNote>> notes;
-    if (FILE* f = fopen(pipe_notes_path().c_str(), "rb")) {
+    if (FILE* f = hos_fopen_read_binary(pipe_notes_path().c_str())) {
         uint64_t head[2] = {0, 0};
         if (fread(head, 8, 2, f) == 2 && head[0] == program_cache_stamp() && head[1] == sizeof(PipeNote)) {
             std::unordered_set<uint64_t> seen;
@@ -1232,7 +1232,7 @@ void notes_open_locked(const std::vector<std::unique_ptr<PipeNote>>* known) {
     static const uint64_t stamp = program_cache_stamp();
     const std::string path = pipe_notes_path();
     uint64_t head[2] = {0, 0};
-    if (FILE* f = fopen(path.c_str(), "rb")) {
+    if (FILE* f = hos_fopen_read_binary(path.c_str())) {
         if (fread(head, 8, 2, f) != 2) head[0] = 0;
         fclose(f);
     }
@@ -1240,7 +1240,7 @@ void notes_open_locked(const std::vector<std::unique_ptr<PipeNote>>* known) {
     if (same && known) {
         for (const auto& n : *known) noted.insert(n->key);
     } else if (same) {
-        if (FILE* f = fopen(path.c_str(), "rb")) {
+        if (FILE* f = hos_fopen_read_binary(path.c_str())) {
             auto rec = std::make_unique<PipeNote>();
             if (_fseeki64(f, 16, SEEK_SET) == 0)
                 while (fread(rec.get(), sizeof(PipeNote), 1, f) == 1) noted.insert(rec->key);
@@ -1286,7 +1286,7 @@ std::string computes_path() {
 }
 std::unordered_set<uint64_t> computes_read() {
     std::unordered_set<uint64_t> keys;
-    if (FILE* f = fopen(computes_path().c_str(), "rb")) {
+    if (FILE* f = hos_fopen_read_binary(computes_path().c_str())) {
         char magic[8] = {};
         if (fread(magic, 1, 8, f) == 8 && !memcmp(magic, kComputesMagic, 8))
             for (uint64_t k = 0; fread(&k, 8, 1, f) == 1;) keys.insert(k);
@@ -1429,7 +1429,7 @@ bool state_v2_resolve(const StateRec2& v, StateRec& r) {
 std::vector<StateRec> state_list_read(const std::string& path, int* version = nullptr) {
     std::vector<StateRec> out;
     if (version) *version = 0;
-    FILE* f = fopen(path.c_str(), "rb");
+    FILE* f = hos_fopen_read_binary(path.c_str());
     if (!f) return out;
     char magic[8];
     uint32_t size = 0;
@@ -1464,7 +1464,7 @@ std::unordered_set<uint64_t> state_seen;
 void state_open_locked() {
     const std::string path = state_list_path("hookshot_pipeline_states.bin");
     bool keep = false;
-    if (FILE* f = fopen(path.c_str(), "rb")) {
+    if (FILE* f = hos_fopen_read_binary(path.c_str())) {
         char magic[8];
         uint32_t size = 0;
         const bool v2 = fread(magic, 8, 1, f) == 1 && fread(&size, 4, 1, f) == 1 && !memcmp(magic, kStateMagic2, 8) &&
@@ -2741,7 +2741,7 @@ bool menu_env_on(const char* env_name, const char* ini_key_name, bool def = fals
     ini = ini.substr(0, ini.find_last_of("\\/") + 1) + "hookshot_options.ini";
     const size_t klen = strlen(ini_key_name);
     int v = -1, version = 0;
-    if (FILE* f = fopen(ini.c_str(), "r")) {
+    if (FILE* f = hos_fopen_read(ini.c_str())) {
         char line[80];
         while (fgets(line, sizeof line, f)) {
             if (!strncmp(line, ini_key_name, klen) && line[klen] == '=') v = atoi(line + klen + 1);
@@ -7334,7 +7334,7 @@ int64_t file_clock_now() {
 /// The seed's contents, hashed four words at a time: ~0.1 s for its 540 MB read from memory, 0.3-0.6 s from the disk (a byte at a
 /// time, as hash_bytes, 0.45 s from memory). Only after the file was written again
 bool seed_file_hash(const std::string& path, uint64_t* out) {
-    FILE* f = fopen(path.c_str(), "rb");
+    FILE* f = hos_fopen_read_binary(path.c_str());
     if (!f) return false;
     constexpr uint64_t p1 = 0x9E3779B185EBCA87ull, p2 = 0xC2B2AE3D27D4EB4Full;
     const auto mix = [](uint64_t h, uint64_t w) {
@@ -7363,7 +7363,7 @@ bool seed_file_hash(const std::string& path, uint64_t* out) {
 /// The record: 0 none, 1 the translator alone (written before the seed was), 2 both. A record without the time it was written
 /// at (four words) never takes the shortcut: its seed is hashed, and the record written again with it
 int prepared_read(const std::string& path, PreparedFor* had) {
-    FILE* f = fopen(path.c_str(), "rb");
+    FILE* f = hos_fopen_read_binary(path.c_str());
     if (!f) return 0;
     uint64_t r[6]{};
     const size_t n = fread(r, 8, 6, f);
@@ -7428,7 +7428,7 @@ bool prepare_is_update() {
     // (opt-in, RX_VK_PREPARE_BACKGROUND=1: when the translator changed, the program cache is gone too, and the first area then
     // translated thousands of programs in play: 1 fps and black frames for minutes, which looked broken. Before the game is the default)
     if (getenv("RX_VK_PREPARE_AGAIN") || !getenv("RX_VK_PREPARE_BACKGROUND")) return false;
-    FILE* f = fopen(prepared_path().c_str(), "rb");
+    FILE* f = hos_fopen_read_binary(prepared_path().c_str());
     if (!f) return false;
     uint64_t have = 0;
     const bool read = fread(&have, 8, 1, f) == 1;   // (the record's first word, the translator's stamp: see PreparedFor)
@@ -7553,7 +7553,7 @@ bool prepare_run(void (*progress)(size_t done, size_t total), bool background, b
         logf("vk: the shaders are prepared, but their driver's part was made for another driver or other settings: made again%s",
              libraries ? "" : " (no stage libraries: the predicted pipelines alone)");
         if (libraries) {
-            if (FILE* f = fopen(warming.c_str(), "rb")) {
+            if (FILE* f = hos_fopen_read_binary(warming.c_str())) {
                 fclose(f);
                 logf("vk: the last start did not finish the driver's part of the shaders: left out");
             } else {
@@ -7584,7 +7584,7 @@ bool prepare_run(void (*progress)(size_t done, size_t total), bool background, b
     bool warm = libraries && !background;
     bool warm_cs = !getenv("RX_VK_NO_WARM") && !background;
     if (background) {
-    } else if (FILE* f = fopen(warming.c_str(), "rb")) {
+    } else if (FILE* f = hos_fopen_read_binary(warming.c_str())) {
         fclose(f);
         warm = warm_cs = false;
         logf("vk: the last start did not finish the driver's part of the shaders: left out");
@@ -7729,7 +7729,7 @@ void precompile_run(void (*progress)(size_t done, size_t total)) {
     // precompile and compiled everything in play: "stuck at 99%, then fine on the second start", 2026-11-08)
     const std::string running = pipe_notes_path() + ".running";
     int ended_inside = 0;
-    if (FILE* f = fopen(running.c_str(), "rb")) {
+    if (FILE* f = hos_fopen_read_binary(running.c_str())) {
         if (fscanf(f, "%d", &ended_inside) != 1) ended_inside = 1;
         fclose(f);
         if (ended_inside >= 2) {
@@ -7889,14 +7889,14 @@ void precompile_run(void (*progress)(size_t done, size_t total)) {
 void prepare_guess(size_t out[3]) {
     out[0] = out[1] = out[2] = 0;
     const auto size_of = [](const std::string& path) -> int64_t {
-        FILE* f = fopen(path.c_str(), "rb");
+        FILE* f = hos_fopen_read_binary(path.c_str());
         if (!f) return 0;
         _fseeki64(f, 0, SEEK_END);
         const int64_t n = _ftelli64(f);
         fclose(f);
         return n;
     };
-    if (FILE* f = fopen(seed_path().c_str(), "rb")) {
+    if (FILE* f = hos_fopen_read_binary(seed_path().c_str())) {
         char head[16]{};
         uint32_t programs = 0;
         if (fread(head, 1, 16, f) == 16 && !memcmp(head, "HKSEED01", 8)) std::memcpy(&programs, head + 8, 4);

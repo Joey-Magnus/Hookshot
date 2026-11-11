@@ -1265,7 +1265,7 @@ void save() {
     // (hookshot) the lines that are not the menu's are kept: the controls, pad_ and key_ (host/nn_hid.c)
     // (and every other line the menu does not write, such as discord_app_id=: they were dropped at the next save)
     std::string kept, others;
-    if (FILE* f = fopen(ini_path().c_str(), "r")) {
+    if (FILE* f = hos_fopen_read(ini_path().c_str())) {
         char line[256];
         while (fgets(line, sizeof line, f)) {
             if (!strncmp(line, "pad_", 4) || !strncmp(line, "key_", 4)) {
@@ -2580,7 +2580,7 @@ void menu_init() {
         const char* hearts = getenv("HOS_OOT_PROTECT_HEARTS");
         protect_hearts.store(hearts && !strcmp(hearts, "1"));
     }
-    if (FILE* f = fopen(ini_path().c_str(), "r")) {
+    if (FILE* f = hos_fopen_read(ini_path().c_str())) {
         has_options = true;
         char line[80];
         bool has_resolution = false;

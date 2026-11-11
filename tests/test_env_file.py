@@ -129,6 +129,7 @@ def check_full_list(cc, fn, tmp):
     src.write_text(r'''#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "hos_fopen_read.h"
 #define MAX_PATH 260
 typedef unsigned long DWORD;
 static DWORD hos_game_path_a(char *out, DWORD size) { snprintf(out, size, "%s", "''' + exe + r'''"); return (DWORD)strlen(out); }
@@ -142,8 +143,8 @@ int main(void) {
     return !ok;
 }
 ''', encoding="utf-8")
-    subprocess.run([cc, "-std=c11", "-D_POSIX_C_SOURCE=200809L", "-Wall", "-Werror", "-Wno-unused-function", str(src),
-                    "-o", str(tmp / "full_list")], check=True)
+    subprocess.run([cc, "-std=c11", "-D_POSIX_C_SOURCE=200809L", "-Wall", "-Werror", "-Wno-unused-function", "-I",
+                    str(ROOT / "host"), str(src), "-o", str(tmp / "full_list")], check=True)
     r = subprocess.run([str(tmp / "full_list")], capture_output=True, text=True)
     print(r.stdout, end="")
     if r.returncode:
@@ -207,6 +208,7 @@ def main():
         fixture = r'''#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "hos_fopen_read.h"   /* (hookshot_env.txt read as a regular file only) */
 #ifdef _WIN32   /* (the test's own setenv/unsetenv: Windows has _putenv, which the game itself uses there) */
 static int setenv(const char *name, const char *value, int overwrite) {
     char s[1024];
@@ -279,8 +281,8 @@ int main(int argc, char **argv) {
         src = tmp / "fixture.c"
         src.write_text(fixture, encoding="utf-8")
         out = tmp / "fixture"
-        subprocess.run([a.cc, "-std=c11", "-D_POSIX_C_SOURCE=200809L", "-Wall", "-Werror", str(src), "-o", str(out)],
-                       check=True)
+        subprocess.run([a.cc, "-std=c11", "-D_POSIX_C_SOURCE=200809L", "-Wall", "-Werror", "-Wno-unused-function", "-I",
+                        str(ROOT / "host"), str(src), "-o", str(out)], check=True)
         before = (game / "hookshot_env.txt").read_text(encoding="utf-8")
         subprocess.run([str(out), str(tmp / "test_env.txt"), str(tmp / "missing.txt")], check=True)
         if (game / "hookshot_env.txt").read_text(encoding="utf-8") != before:

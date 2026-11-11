@@ -124,6 +124,13 @@ int main(int argc, char **argv) {
              from, from, w, from);
     CHECK(system(cmd) == 0);
     CHECK(!copy_tree(from, to));
+    /* (and a FIFO in a copied folder fails the copy at once, not waited on) */
+    char fifo_from[PATH_MAX], fifo_to[PATH_MAX];
+    snprintf(fifo_from, sizeof fifo_from, "%s/fifo", w);
+    snprintf(fifo_to, sizeof fifo_to, "%s/fifo-copied", w);
+    snprintf(cmd, sizeof cmd, "mkdir -p '%s' && mkfifo '%s/pipe'", fifo_from, fifo_from);
+    CHECK(system(cmd) == 0);
+    CHECK(!copy_tree(fifo_from, fifo_to));
     /* delete_tree takes a link away, never what it names */
     delete_tree(from);
     CHECK(!there(w, "copyme") && there(key, "key"));

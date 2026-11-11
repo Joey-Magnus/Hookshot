@@ -63,7 +63,7 @@ static int choose_face(const char *dir) {
     char path[MAX_PATH], line[80];
     int choice = 0;
     snprintf(path, sizeof path, "%shookshot_options.ini", dir);
-    FILE *f = fopen(path, "r");
+    FILE *f = hos_fopen_read(path);
     if (f) {
         while (fgets(line, sizeof line, f))
             if (!strncmp(line, "button_prompts=", 15)) choice = atoi(line + 15);
@@ -200,7 +200,7 @@ static int write_zstd_raw(const char *path, const uint8_t *data, size_t n) {
    read into memory, and a file whose magic is wrong is left before its size is allocated */
 #define PROMPT_FILE_MAX (256L << 20)
 static uint8_t *read_all(const char *path, const char *magic, long *n) {   /* (the whole file, if it starts with magic: NULL any) */
-    FILE *f = fopen(path, "rb");
+    FILE *f = hos_fopen_read_binary(path);   /* (a regular file: not a FIFO the start would wait on) */
     if (!f) return NULL;
     char head[4];
     if (magic && (fread(head, 1, 4, f) != 4 || memcmp(head, magic, 4))) {
@@ -273,14 +273,14 @@ static int write_patched(const char *game, const char *out, const char *keypath,
     qsort(runs, nruns, sizeof *runs, run_cmp);
     char keyline[32] = "", want[32];
     FILE *f;
-    if ((f = fopen(keypath, "r"))) {
+    if ((f = hos_fopen_read(keypath))) {
         if (!fgets(keyline, sizeof keyline, f)) keyline[0] = 0;
         fclose(f);
     }
     snprintf(want, sizeof want, "%016llx", (unsigned long long)h);
     int ok = !strcmp(keyline, want) && GetFileAttributesA(out) != INVALID_FILE_ATTRIBUTES;
     if (!ok) {   /* the game's file through, the chosen runs written over it, out as raw zstd blocks */
-        FILE *in = fopen(game, "rb"), *o = hos_fopen_write(out, "wb");
+        FILE *in = hos_fopen_read_binary(game), *o = hos_fopen_write(out, "wb");
         uint8_t *chunk = (uint8_t *)malloc(131072);
         ok = in && o && chunk;
         if (ok) {

@@ -26,6 +26,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 RUN_ALL_SKIP = {"windows": "the links checked are Linux's (an archive's links are not made on Windows)"}
 
+# (the small text files the game reads at the start, each through hos_fopen_read: file -> how many)
+BINARY_READS = {"gpu/vk/vk_draw.cpp": 15, "host/prompts.c": 2, "gpu/vk/vk_main.cpp": 1, "gpu/vk/vk_game_font.h": 1,
+                "host/hos_main.c": 1}   # (the caches, lists and markers; the prompt files)
+READS = {"host/hos_main.c": 2, "host/nn_applet.c": 2, "host/nn_hid.c": 2, "host/discord_rpc.c": 1, "host/prompts.c": 2,
+         "host/nn_audio.c": 1, "gpu/vk/vk_menu.cpp": 2, "gpu/vk/vk_draw.cpp": 1, "gpu/vk/vk_main.cpp": 2}
+
 # (the sources of the writes listed above, and how many plain fopen writes each keeps: switch-gated debugging only.
 # vk_draw.cpp: RX_VK_PROBE's two files and RX_VK_DRAW_STATS' file)
 ALLOWED = {"gpu/vk/vk_menu.cpp": 0, "gpu/vk/vk_draw.cpp": 3, "host/nn_applet.c": 0, "host/prompts.c": 0,
@@ -50,7 +56,7 @@ static int text_is(const char *path, const char *want) {
     return n == strlen(want) && !memcmp(got, want, n);
 }
 int main(int argc, char **argv) {
-    const char *dir = argv[1];
+    const char *dir = argv[1];   /* (a folder: hos_fopen_read refuses it) */
     char target[512], link[512], dangling[512], nowhere[512], plain[512], fifo[512];
     snprintf(target, sizeof target, "%s/target", dir);
     snprintf(link, sizeof link, "%s/hookshot_options.ini", dir);
@@ -75,6 +81,14 @@ int main(int argc, char **argv) {
     CHECK(f && fputs("new", f) >= 0 && fclose(f) == 0 && text_is(plain, "new"));
     CHECK(hos_fopen_write(plain, "r") == NULL);
     puts("PASS: hos_fopen_write refuses links and FIFOs, writes, empties and appends to regular files");
+    /* (hos_fopen_read: a regular file, also through a link, but never a FIFO, which it does not wait on) */
+    f = hos_fopen_read(plain);
+    char got[64] = {0};
+    CHECK(f && fgets(got, sizeof got, f) && !strcmp(got, "new") && fclose(f) == 0);
+    f = hos_fopen_read(link);
+    CHECK(f && fgets(got, sizeof got, f) && !strcmp(got, "the player's file") && fclose(f) == 0);
+    CHECK(hos_fopen_read(fifo) == NULL && hos_fopen_read(dir) == NULL && hos_fopen_read_binary(fifo) == NULL);
+    puts("PASS: hos_fopen_read reads regular files and refuses FIFOs and folders without waiting");
     return 0;
 }
 '''
@@ -140,14 +154,30 @@ def main():
                 rel, len(plain), keep, "; ".join(plain)))
         if "hos_fopen_write(" not in text:
             bad.append("%s: does not use hos_fopen_write" % rel)
+    for rel, want in READS.items():
+        text = (ROOT / rel).read_text(encoding="utf-8", errors="replace")
+        got = text.count("hos_fopen_read(")
+        if got != want:
+            bad.append("%s: %d reads through hos_fopen_read, %d expected" % (rel, got, want))
+        for name in ("hookshot_options.ini", "hookshot_env.txt", "language.txt", "mouse_sens.txt"):
+            for m in re.finditer(r'"%s"\);\s*\n\s*(?:#endif\s*\n\s*)?(?:FILE \*)?\w+ = fopen\(path, "r"\)' % re.escape(name), text):
+                bad.append("%s: %s still read with fopen" % (rel, name))
+    for rel, want in BINARY_READS.items():
+        got = (ROOT / rel).read_text(encoding="utf-8", errors="replace").count("hos_fopen_read_binary(")
+        if got != want:
+            bad.append("%s: %d reads through hos_fopen_read_binary, %d expected" % (rel, got, want))
     if bad:
         sys.exit("\n".join(bad))
-    print("PASS: the game's own writes in %d files go through hos_fopen_write" % len(ALLOWED))
+    print("PASS: the game's own writes in %d files go through hos_fopen_write, its start-up reads through hos_fopen_read"
+          % len(ALLOWED))
     # (the back end's objects are keyed by the headers they see: the host's it includes must be among them, or a change
     # to hos_fopen_write.h left vk_draw.cpp's object with the old code)
     included = set()
     for f in (ROOT / "gpu" / "vk").glob("*.[ch]*"):
         included.update(re.findall(r'#include "\.\./\.\./host/([\w.]+)"', f.read_text(encoding="utf-8", errors="replace")))
+    for h in list(included):   # (and the host headers those include)
+        if (ROOT / "host" / h).exists():
+            included.update(re.findall(r'#include "([\w.]+)"', (ROOT / "host" / h).read_text(encoding="utf-8")))
     build = (ROOT / "nx2" / "build.py").read_text(encoding="utf-8")
     keyed = re.search(r'vdeps \+= b"".join\(open\(os\.path\.join\(HOST, h\), "rb"\)\.read\(\) for h in \(([^)]*)\)\)', build)
     keyed = set(re.findall(r'"([\w.]+)"', keyed.group(1))) if keyed else set()

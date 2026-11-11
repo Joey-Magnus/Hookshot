@@ -33,6 +33,7 @@ def block(text, marker):
 
 FIXTURE = r"""
 #include <cstdio>
+#include "HOS_FOPEN_HEADER"
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -75,7 +76,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix="menu-env-on-") as tmp:
         work = Path(tmp)
         source, exe = work / "fixture.cpp", work / "fixture.exe"
-        source.write_text(FIXTURE.replace("BODY", body), encoding="utf-8")
+        source.write_text(FIXTURE.replace("BODY", body).replace("HOS_FOPEN_HEADER", (ROOT / "host" / "hos_fopen_read.h").as_posix()), encoding="utf-8")
         subprocess.run([args.cxx, "-std=c++17", "-Wall", "-Wextra", "-Werror", str(source), "-o", str(exe)], check=True)
         for text, env_value, reuse, sampler in CASES:
             ini = work / "hookshot_options.ini"

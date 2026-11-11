@@ -71,6 +71,7 @@ def main():
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include "HOS_FOPEN_HEADER"
 #include <cstdlib>
 #include <cstring>
 #include <iterator>
@@ -224,7 +225,7 @@ int main(int argc, char** argv) {
     with tempfile.TemporaryDirectory(prefix='state-portable-') as tmp:
         folder = Path(tmp)
         source, exe = folder / 'fixture.cpp', folder / 'fixture.exe'
-        source.write_text(fixture, encoding='utf-8')
+        source.write_text(fixture.replace('HOS_FOPEN_HEADER', (ROOT / "host" / "hos_fopen_read.h").as_posix()), encoding='utf-8')
         subprocess.run([args.cxx, '-std=c++20', '-Wall', '-Wextra', '-Wno-unused-function', '-Werror', '-D_CRT_SECURE_NO_WARNINGS', '-I', str(args.headers),
                         '-I', str(ROOT / 'gpu/render'), str(source), '-o', str(exe)], check=True)
         subprocess.run([str(exe), str(folder)], check=True)

@@ -7,6 +7,7 @@
    mode: "w", "wb", "a" or "ab". Used by the host (C) and the renderer (C++). */
 #pragma once
 #include <stdio.h>
+#include "hos_fopen_read.h"   /* (and the reads: hos_fopen_read, hos_fopen_read_binary) */
 #ifdef _WIN32
 #ifndef NOMINMAX
 #define NOMINMAX

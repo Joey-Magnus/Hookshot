@@ -32,6 +32,7 @@ def main():
     fixture=r'''
 #define _CRT_SECURE_NO_WARNINGS 1
 #include <cstdio>
+#include "HOS_FOPEN_HEADER"
 #include <cstring>
 #include <cstdint>
 #include <filesystem>
@@ -112,7 +113,7 @@ int main(int argc,char** argv) {
 '''
     with tempfile.TemporaryDirectory(prefix='state-reader-counts-') as tmp:
         folder=Path(tmp);source=folder/'fixture.cpp';exe=folder/'fixture.exe'
-        source.write_text(fixture,encoding='utf-8')
+        source.write_text(fixture.replace('HOS_FOPEN_HEADER', (ROOT / "host" / "hos_fopen_read.h").as_posix()),encoding='utf-8')
         subprocess.run([args.cxx,'-std=c++20','-Wall','-Wextra','-Werror',str(source),'-o',str(exe)],check=True)
         subprocess.run([str(exe),str(folder)],check=True)
 

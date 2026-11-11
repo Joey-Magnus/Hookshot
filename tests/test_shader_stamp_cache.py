@@ -53,6 +53,7 @@ class ShaderStampCacheTests(unittest.TestCase):
             "host/mingw_msvc_shims.c": "int shims;\n",
             "host/hos_fopen_write.h": "struct FopenWrite {};\n",   # (the host's headers the back end includes: its keys)
             "host/hos_wide_size.h": "struct WideSize {};\n",
+            "host/hos_fopen_read.h": "struct FopenRead {};\n",
             "gpu/vk/eden/translate.cpp": "int translator;\n",
             "gpu/vk/eden/ir.h": "struct IR {};\n",
             "gpu/vk/sirit/src/sirit.cpp": "int sirit;\n",

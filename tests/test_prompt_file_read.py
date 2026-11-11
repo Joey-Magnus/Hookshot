@@ -42,6 +42,7 @@ def main():
     limit = "\n".join(l for l in src.splitlines() if l.startswith("#define PROMPT_FILE_MAX"))
     fixture = r'''#include <stdint.h>
 #include <stdio.h>
+#include "HOS_FOPEN_HEADER"
 #include <stdlib.h>
 #include <string.h>
 static size_t largest;
@@ -71,9 +72,9 @@ int main(int argc, char **argv) {
 '''
     with tempfile.TemporaryDirectory(prefix="prompt-read-") as tmp:
         tmp = Path(tmp)
-        (tmp / "fixture.c").write_text(fixture, encoding="utf-8")
+        (tmp / "fixture.c").write_text(fixture.replace("HOS_FOPEN_HEADER", (ROOT / "host" / "hos_fopen_read.h").as_posix()), encoding="utf-8")
         exe = tmp / "fixture"
-        subprocess.run([a.cc, "-std=c11", "-D_FILE_OFFSET_BITS=64", "-Wall", "-Werror", "-Wno-unused-function",
+        subprocess.run([a.cc, "-std=c11", "-D_FILE_OFFSET_BITS=64", "-D_POSIX_C_SOURCE=200809L", "-Wall", "-Werror", "-Wno-unused-function",
                         str(tmp / "fixture.c"), "-o", str(exe)], check=True)
         (tmp / "good.bin").write_bytes(b"HPTX" + bytes(4092))
         (tmp / "other.bin").write_bytes(b"XXXX" + bytes(4092))

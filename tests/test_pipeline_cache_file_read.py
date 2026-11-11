@@ -55,6 +55,7 @@ def main():
             limit = line
     fixture = r'''#include <cstdint>
 #include <cstdio>
+#include "HOS_FOPEN_HEADER"
 #include <cstring>
 #include <string>
 #include <vector>
@@ -76,7 +77,7 @@ int main(int argc, char** argv) {
     with tempfile.TemporaryDirectory(prefix="pcache-read-") as tmp:
         tmp = Path(tmp)
         src = tmp / "fixture.cpp"
-        src.write_text(fixture, encoding="utf-8")
+        src.write_text(fixture.replace("HOS_FOPEN_HEADER", (ROOT / "host" / "hos_fopen_read.h").as_posix()), encoding="utf-8")
         exe = tmp / "fixture"
         subprocess.run([a.cxx, "-std=c++17", "-O1", "-Wall", "-Werror", "-D_FILE_OFFSET_BITS=64", str(src), "-o", str(exe)],
                        check=True)

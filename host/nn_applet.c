@@ -40,7 +40,7 @@ static const char *desired_language(void) {
         while (n > 0 && path[n - 1] != 92 && path[n - 1] != 47) n--;
         snprintf(path + n, sizeof path - n, "language.txt");
 #endif
-        FILE *f = fopen(path, "r");
+        FILE *f = hos_fopen_read(path);
         if (f) {
             char line[80];
             int whole = 1;   /* (the first line is longer than this: its second piece, "ave, and start...", was taken for the code) */
@@ -97,7 +97,7 @@ static int ini_text(const char *key, char *out, size_t size) {
     char *slash = n ? (strrchr(path, 92) ? strrchr(path, 92) : strrchr(path, 47)) : NULL;   /* (linux: '/'; the game folder's, not bin\\'s) */
     if (!slash || !size) return 0;
     snprintf(slash + 1, (size_t)(path + MAX_PATH - slash - 1), "hookshot_options.ini");
-    FILE *f = fopen(path, "r");
+    FILE *f = hos_fopen_read(path);
     if (!f) return 0;
     char line[80];
     const size_t len = strlen(key);
