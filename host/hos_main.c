@@ -393,6 +393,12 @@ static int env_line_allowed(const char *name, const char *value) {
     int ok = 0;
     for (size_t i = 0; i < sizeof prefixes / sizeof *prefixes; i++) ok |= !strncmp(name, prefixes[i], strlen(prefixes[i]));
     if (!ok || !strcmp(name, "HOS_ENV_FILE") || !strcmp(name, "SDL_DYNAMIC_API")) return 0;
+    /* (hookshot) of the HOOKSHOT_ names, only the game's own: the others are the builder's (HOOKSHOT_MEM_LIMIT_GB,
+       HOOKSHOT_LATEST_TAG, HOOKSHOT_JOBS...), and the builder an update starts from the game inherits its environment.
+       HOOKSHOT_PREPARE_ONLY is the game's but set by --prepare-shaders alone (from the file, the game would never play) */
+    if (!strncmp(name, "HOOKSHOT_", 9) && strcmp(name, "HOOKSHOT_NO_UPDATE_CHECK") && strcmp(name, "HOOKSHOT_NO_AV1_NOTICE") &&
+        strcmp(name, "HOOKSHOT_OCCLUSION_OFF"))
+        return 0;
     /* (hookshot) nor the libraries SDL loads by name (SDL_VULKAN_LIBRARY, SDL_OPENGL_LIBRARY, SDL_VIDEO_GL_DRIVER,
        SDL_VIDEO_EGL_DRIVER...): a bare file name is looked for beside the game and in the current folder on Windows */
     if (!strncmp(name, "SDL_", 4) && (strstr(name, "_LIB") || strstr(name, "GL_DRIVER"))) return 0;

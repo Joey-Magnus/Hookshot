@@ -83,6 +83,39 @@ DLSS_DIRS = {
 DLSS_OK = "C:\\ngx" if os.name == "nt" else "/opt/ngx"   # (the fixture's own value, taken on this system)
 
 
+# (the HOOKSHOT_ names a shared file may set: the game's own, as host/ and gpu/ read them, but HOOKSHOT_PREPARE_ONLY, which
+# --prepare-shaders sets; every other HOOKSHOT_ name is the builder's, and an update the game starts passes its environment on)
+GAME_HOOKSHOT = {"HOOKSHOT_NO_UPDATE_CHECK", "HOOKSHOT_NO_AV1_NOTICE", "HOOKSHOT_OCCLUSION_OFF"}
+
+
+def check_hookshot_names(cc, main_c, tmp):
+    game = set()
+    for folder in ("host", "gpu"):
+        for f in (ROOT / folder).rglob("*"):
+            if f.suffix in (".c", ".cpp", ".h") and "third_party" not in f.parts:
+                game.update(re.findall(r'getenv\("(HOOKSHOT_[A-Z0-9_]+)"\)', f.read_text(encoding="utf-8", errors="replace")))
+    builder = set()
+    for folder in ("builder", "nx2", "scripts"):
+        for f in (ROOT / folder).rglob("*"):
+            if f.suffix in (".py", ".cs", ".c", ".sh") and "third_party" not in f.parts:
+                builder.update(re.findall(r"\b(HOOKSHOT_[A-Z0-9_]+)\b", f.read_text(encoding="utf-8", errors="replace")))
+    builder -= game
+    if not GAME_HOOKSHOT <= game or len(builder) < 20:
+        raise SystemExit("the HOOKSHOT_ names found do not look right: update GAME_HOOKSHOT (game %s)" % sorted(game))
+    src = tmp / "hookshot_names.c"
+    src.write_text("#include <stdio.h>\n#include <string.h>\n" + block(main_c, "static int env_line_allowed(") +
+                   '\nint main(int c, char **v) { for (int i = 1; i < c; i++) if (env_line_allowed(v[i], "1")) '
+                   'puts(v[i]); return 0; }\n', encoding="utf-8")
+    subprocess.run([cc, "-std=c11", "-Wall", "-Werror", str(src), "-o", str(tmp / "hookshot_names")], check=True)
+    names = sorted(game | builder)
+    taken = set(subprocess.run([str(tmp / "hookshot_names"), *names], capture_output=True, text=True,
+                               check=True).stdout.split())
+    if taken != GAME_HOOKSHOT:
+        raise SystemExit("hookshot_env.txt: HOOKSHOT_ names taken %s, expected only the game's %s"
+                         % (sorted(taken), sorted(GAME_HOOKSHOT)))
+    print("PASS: of %d HOOKSHOT_ names, a shared hookshot_env.txt takes only the game's own %d" % (len(names), len(taken)))
+
+
 def check_dlss_dir(cc, main_c, tmp):
     src = tmp / "dlss_dir.c"
     src.write_text("#include <stdio.h>\n#include <string.h>\n" + block(main_c, "static int env_line_allowed(") +
@@ -115,6 +148,7 @@ def main():
         tmp = Path(tmp)
         check_path_valued(a.cc, main_c, tmp)
         check_dlss_dir(a.cc, main_c, tmp)
+        check_hookshot_names(a.cc, main_c, tmp)
         game = tmp / "game"
         game.mkdir()
         # (the player's file sets the game's switches only: not the system's variables, HOS_ENV_FILE or paths)
