@@ -225,7 +225,11 @@ class Tracks(unittest.TestCase):
         sys.path.insert(0, str(ROOT / "builder" / "py"))
         from hookshot_builder import setup_parts, updater
         cs = (ROOT / "builder/HookshotBuilder/Updater.cs").read_text(encoding="utf-8")
-        cs_rule = re.search(r'TagName = new\(@"\^(.*?)\$"\)', cs).group(1)
+        # (anchored with \z: .NET's $ also matches before a last line break, so "v2\n" passed there; the C# fixture,
+        # tests/updater_asset_digest_test.cs tag-rule, runs the rule itself)
+        found = re.search(r'TagName = new\(@"\^(.*?)\\z"\)', cs)
+        self.assertIsNotNone(found, "Updater.cs TagName must end in \\z")
+        cs_rule = found.group(1)
         cs_ok = lambda t: re.fullmatch(cs_rule, t) is not None and t not in (".", "..")   # noqa: E731
         good = ["v2.1.0", "v2.1.0-rc.1", "v2.1.0-rc.1-3-g1a2b3c4", "nightly", "v2.0.5-3-g1a2b3c4-dirty"]
         bad = ["", ".", "..", "../v2", "v2/../..", "v2 --fetched", "v2\\x", "C:", "v2\n", "a" * 129, "%2e%2e", "v2?x", "v2#x"]

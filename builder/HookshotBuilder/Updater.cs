@@ -39,9 +39,10 @@ static class Updater
     // builder/linux/linux_update.py have the same rules ----
     public const string Release = "release", Candidate = "rc", Nightly = "nightly";
     const string Releases = "https://api.github.com/repos/NotRexed/Hookshot/releases";
-    static readonly System.Text.RegularExpressions.Regex NightlyName = new(@"-\d+-g[0-9a-f]+(-dirty)?$");
-    static readonly System.Text.RegularExpressions.Regex ReleaseName = new(@"^v(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?$");
-    static readonly System.Text.RegularExpressions.Regex TagName = new(@"^[0-9A-Za-z._+-]{1,128}$");
+    // (\z, not $, in these: .NET's $ also matches before a last line break, and "v2.1.0\n" was taken)
+    static readonly System.Text.RegularExpressions.Regex NightlyName = new(@"-\d+-g[0-9a-f]+(-dirty)?\z");
+    static readonly System.Text.RegularExpressions.Regex ReleaseName = new(@"^v(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?\z");
+    static readonly System.Text.RegularExpressions.Regex TagName = new(@"^[0-9A-Za-z._+-]{1,128}\z");
 
     /// A release name as every builder takes it (builder/linux/linux_update.py tag_ok, host/hos_update.c safe_tag): it goes
     /// into release links and folder names, from the command line or GitHub's answer
@@ -120,7 +121,7 @@ static class Updater
                 using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
                 string? newest = null;
                 foreach (var r in doc.RootElement.EnumerateArray())
-                    if (r.GetProperty("tag_name").GetString() is { } t && ReleaseName.IsMatch(t) && (newest == null || Newer(t, newest)))
+                    if (r.GetProperty("tag_name").GetString() is { } t && ReleaseName.IsMatch(t) && TagOk(t) && (newest == null || Newer(t, newest)))
                         newest = t;
                 if (newest != null) return newest;
             }
