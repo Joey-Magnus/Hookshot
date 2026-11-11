@@ -31,13 +31,14 @@ int main() {
     t.add(BUDGET, false, 1 << 20);
     t.add(BUDGET, true, 3 << 20);
     t.add(DEAD, false, 8 << 20);
-    t.add(DRAWN_OVER, true, 1 << 20);
+    t.add(DRAWN_OVER, true, 1 << 20, true);
     expect(t.total() == 4 && t.n[BUDGET] == 2 && t.n[DEAD] == 1 && t.n[DRAWN_OVER] == 1, "counts by reason");
     expect(t.lost == 2 && t.lost_bytes == (4ull << 20), "the lost ones and their bytes");
+    expect(t.lost_finalized == 1, "of them, the finalized one");
 
     char line[160];
     describe(t, line, sizeof line);
-    expect(!std::strcmp(line, "budget 2, drawn over 1, dead targets 1; GPU-drawn with no copy kept: 2, 4 MB"), line);
+    expect(!std::strcmp(line, "budget 2, drawn over 1, dead targets 1; GPU-drawn with no copy kept: 1 live, 1 finalized, 4 MB"), line);
     Tally clean;
     clean.add(DEAD, false, 1);
     describe(clean, line, sizeof line);

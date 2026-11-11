@@ -4240,13 +4240,14 @@ void texture_frame(uint64_t completed) {
         if (e.shifted) n_dead++, b_dead += tex->bytes;
         {   // (hookshot) why it goes, and whether its texels go with it (evict_reason.h). The flush above can fail: then they did
             const bool lost = evict_reason::texels_lost(tex->gpu_written, e.overwritten, e.flush && flushed_ok.count(tex));
-            tally.add(evict_reason::classify(e.shifted, e.overwritten), lost, tex->bytes);
+            tally.add(evict_reason::classify(e.shifted, e.overwritten), lost, tex->bytes, tex->released);
             static int lost_logged;
             if (lost && lost_logged++ < 100)
+                // (always over the budget: a sweep lets only drawn-over textures go, and those lose nothing)
                 logf("vk: texture #%u %#llx %ux%ux%u x%u NVN %#x the GPU drew goes with no copy of its texels (%s, unused for %llu "
-                     "frames, %s): made again over this storage, it starts empty", tex->id, (unsigned long long)tex->gpu, tex->width,
-                     tex->height, tex->depth, tex->layers, tex->nvn_format, tex->released ? "finalized" : "live",
-                     (unsigned long long)(frame_no - tex->last_frame), sweep ? "the sweep" : "over the budget");
+                     "frames, over the budget): made again over this storage, it starts empty", tex->id, (unsigned long long)tex->gpu,
+                     tex->width, tex->height, tex->depth, tex->layers, tex->nvn_format, tex->released ? "finalized" : "live",
+                     (unsigned long long)(frame_no - tex->last_frame));
         }
         watch_tex(tex, "evicted");
         if (!tex->gpu_written && tex->uploaded && !remade_skip_old()) {   // (above: made again, it is uploaded from memory)

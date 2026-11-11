@@ -27,21 +27,22 @@ inline bool texels_lost(bool gpu_written, bool overwritten, bool flushed) { retu
 
 struct Tally {
     uint32_t n[COUNT] = {};
-    uint32_t lost = 0;
+    uint32_t lost = 0, lost_finalized = 0;   // (of lost: the ones the game had finalized, which keep_finalized is for)
     uint64_t lost_bytes = 0;
-    void add(Reason r, bool lost_texels, uint64_t bytes) {
+    void add(Reason r, bool lost_texels, uint64_t bytes, bool finalized = false) {
         n[r]++;
-        if (lost_texels) lost++, lost_bytes += bytes;
+        if (lost_texels) lost++, lost_bytes += bytes, lost_finalized += finalized;
     }
     uint32_t total() const { return n[BUDGET] + n[DRAWN_OVER] + n[DEAD]; }
 };
 
-// " (budget 3, drawn over 1, dead targets 40; GPU-drawn with no copy kept: 2, 1 MB)": what follows the count in the log line
+// "budget 3, drawn over 1, dead targets 40; GPU-drawn with no copy kept: 2 live, 5 finalized, 1 MB": what follows the count in
+// the log line
 inline int describe(const Tally& t, char* out, size_t size) {
     const int n = std::snprintf(out, size, "budget %u, drawn over %u, dead targets %u", t.n[BUDGET], t.n[DRAWN_OVER], t.n[DEAD]);
     if (n < 0 || (size_t)n >= size || !t.lost) return n;
-    return n + std::snprintf(out + n, size - (size_t)n, "; GPU-drawn with no copy kept: %u, %llu MB", t.lost,
-                             (unsigned long long)(t.lost_bytes >> 20));
+    return n + std::snprintf(out + n, size - (size_t)n, "; GPU-drawn with no copy kept: %u live, %u finalized, %llu MB",
+                             t.lost - t.lost_finalized, t.lost_finalized, (unsigned long long)(t.lost_bytes >> 20));
 }
 
 } // namespace evict_reason
