@@ -714,30 +714,34 @@ std::atomic<int64_t> pcache_built_since_save{0};
 // most precompiled pipelines as not found in the app's cache (~460 of ~12,900 here), which it then serves from its own.
 std::atomic<size_t> pcache_saved_size{0};
 /// A pipeline cache file's data, or nothing when it cannot be read or was made by another device or driver
+/// (hookshot: or is larger than kPcacheMax). Its header is read and checked first, the rest only for this device's: a file
+/// of any size was read whole into memory before (a large or sparse one from elsewhere ran the game out of memory at start)
+constexpr int64_t kPcacheMax = int64_t{4} << 30;   // (NVIDIA's after a full preparation: about 1.1 GB)
 std::vector<uint8_t> pcache_file_read(const std::string& path) {
     std::vector<uint8_t> data;
-    if (FILE* f = fopen(path.c_str(), "rb")) {
-        _fseeki64(f, 0, SEEK_END);
-        const int64_t sz = _ftelli64(f);
-        _fseeki64(f, 0, SEEK_SET);
-        if (sz > 32) {
-            data.resize((size_t)sz);
-            if (fread(data.data(), 1, data.size(), f) != data.size()) data.clear();
-        }
-        fclose(f);
-    }
-    // (data of another device or driver is dropped before Vulkan sees it)
-    if (data.size() >= 32) {
+    FILE* f = fopen(path.c_str(), "rb");
+    if (!f) return data;
+    _fseeki64(f, 0, SEEK_END);
+    const int64_t sz = _ftelli64(f);
+    _fseeki64(f, 0, SEEK_SET);
+    uint8_t head[32];
+    if (sz > kPcacheMax) logf("vk: %s: %lld MB, larger than a pipeline cache is: not read", path.c_str(), (long long)(sz >> 20));
+    if (sz > 32 && sz <= kPcacheMax && fread(head, 1, sizeof head, f) == sizeof head) {
+        // (data of another device or driver is dropped before Vulkan sees it)
         uint32_t head_size, version, vendor, device;
-        std::memcpy(&head_size, data.data(), 4);
-        std::memcpy(&version, data.data() + 4, 4);
-        std::memcpy(&vendor, data.data() + 8, 4);
-        std::memcpy(&device, data.data() + 12, 4);
-        if (head_size < 32 || head_size > data.size() || version != VK_PIPELINE_CACHE_HEADER_VERSION_ONE ||   // (hookshot)
-            vendor != dev.props.vendorID || device != dev.props.deviceID ||
-            std::memcmp(data.data() + 16, dev.props.pipelineCacheUUID, VK_UUID_SIZE))
-            data.clear();
+        std::memcpy(&head_size, head, 4);
+        std::memcpy(&version, head + 4, 4);
+        std::memcpy(&vendor, head + 8, 4);
+        std::memcpy(&device, head + 12, 4);
+        if (head_size >= 32 && head_size <= sz && version == VK_PIPELINE_CACHE_HEADER_VERSION_ONE &&   // (hookshot)
+            vendor == dev.props.vendorID && device == dev.props.deviceID &&
+            !std::memcmp(head + 16, dev.props.pipelineCacheUUID, VK_UUID_SIZE)) {
+            data.resize((size_t)sz);
+            std::memcpy(data.data(), head, sizeof head);
+            if (fread(data.data() + sizeof head, 1, data.size() - sizeof head, f) != data.size() - sizeof head) data.clear();
+        }
     }
+    fclose(f);
     return data;
 }
 std::string pcache_dir;
