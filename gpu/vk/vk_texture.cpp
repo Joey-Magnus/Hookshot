@@ -2621,6 +2621,7 @@ Texture* texture_touch(Texture* tex, bool for_sampling) {
         tex->upload_gen = gen;
         tex->gpu_written = false;
         tex->released = false;
+        tex->resampled = false;   // (drawn again: "sampled after finalizing" only once finalized again; keep_resampled.h)
     } else if (tex->bc) {
         // (hookshot) a BC3 image holds nothing until its encode has run. Marked uploaded as the others are, its blocks as the
         // memory had them were drawn as coloured noise, and never made again unless the game wrote its memory: the path, the
@@ -3239,6 +3240,7 @@ void texture_written(Texture* tex, const char* why) {
     tex->gpu_written = true;
     tex->gpu_gen = memory_generation();
     tex->released = false;
+    tex->resampled = false;   // (drawn again: "sampled after finalizing" only once finalized again; keep_resampled.h)
     tex->uploaded = true;
 }
 
@@ -4113,16 +4115,22 @@ void texture_frame(uint64_t completed) {
         if (!keep_finalized_max || !tex->gpu_written || !tex->released || !tex->first_written ||
             tex->first_written != tex->last_written || tex->bytes > (4ull << 20))
             return false;
+        if (tex->resampled && frame_no - tex->last_frame <= keep_resampled::kMaxUnused) return false;   // (keep_resampled's, below)
         const auto g = gpu_owned.find(tex->gpu);   // (its storage's range still the one the GPU drew it in)
         if (g == gpu_owned.end() || g->second.first != tex->gpu + std::max<uint64_t>(tex->guest_size, 1)) return false;
         return !drawn_over(tex) && !drawn_over_shifted(tex);
     };
     uint64_t finalized_kept = 0;
-    // (hookshot) the textures the GPU drew that the game samples again after finalizing them, kept over the budget up to
-    // RX_VK_KEEP_RESAMPLED_MB (1024 by default; 0: evicted as before): keep_resampled.h
+    // (hookshot) the textures the GPU drew that the game samples again after finalizing them, used in the last 1,800 presents: kept
+    // over the budget up to RX_VK_KEEP_RESAMPLED_MB (512 by default, the most recently used first; 0: evicted as before). Their
+    // total first, as finalized_kept's: keep_resampled.h
     static const uint64_t keep_resampled_max =
-        (uint64_t)(getenv("RX_VK_KEEP_RESAMPLED_MB") ? std::max(0, atoi(getenv("RX_VK_KEEP_RESAMPLED_MB"))) : 1024) << 20;
-    uint64_t resampled_kept = 0;
+        (uint64_t)(getenv("RX_VK_KEEP_RESAMPLED_MB") ? std::max(0, atoi(getenv("RX_VK_KEEP_RESAMPLED_MB"))) : 512) << 20;
+    uint64_t resampled_total = 0;
+    if (keep_resampled_max)
+        for (auto& [last, tex] : order)
+            if (keep_resampled::candidate(drawn_over_shifted(tex) || drawn_over(tex), tex->gpu_written, tex->resampled, frame_no - last))
+                resampled_total += tex->bytes;
     size_t finalized_kept_n = 0;
     if (keep_finalized_max)
         for (auto& [last, tex] : order)
@@ -4172,13 +4180,14 @@ void texture_frame(uint64_t completed) {
         static const bool keep_over_only = env_on("RX_VK_KEEP_RENDERED_OVER");
         const uint64_t keep_rendered = keep_rendered::presents(known, used, allowed, keep_over_only);
         const bool overwritten = shifted || drawn_over(tex);   // (above)
-        if (keep_resampled::keep(overwritten, tex->gpu_written, tex->resampled, tex->bytes, resampled_kept, keep_resampled_max)) {
+        if (keep_resampled::candidate(overwritten, tex->gpu_written, tex->resampled, frame_no - last) &&
+            keep_resampled::keep(tex->bytes, resampled_total, keep_resampled_max)) {   // (above. Oldest first, as keep_finalized)
             static int logged;
             if (logged++ < 20)
                 logf("vk: texture #%u %#llx %ux%u NVN %#x (%llu MB) the GPU drew and the game samples again after finalizing it: kept, "
-                     "not evicted (%llu MB kept so far this pass; RX_VK_KEEP_RESAMPLED_MB=0: evicted)", tex->id,
-                     (unsigned long long)tex->gpu, tex->width, tex->height, tex->nvn_format, (unsigned long long)(tex->bytes >> 20),
-                     (unsigned long long)(resampled_kept >> 20));
+                     "not evicted (%llu MB of such textures; RX_VK_KEEP_RESAMPLED_MB=0: evicted)", tex->id, (unsigned long long)tex->gpu,
+                     tex->width, tex->height, tex->nvn_format, (unsigned long long)(tex->bytes >> 20),
+                     (unsigned long long)(resampled_total >> 20));
             continue;
         }
         if (finalized_kept && keep_finalized(tex)) {   // (above. Oldest first: beyond the cap the least recently used go)

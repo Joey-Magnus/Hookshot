@@ -13,10 +13,14 @@ def check_source():
     """The eviction pass still asks the rule, the flag is still set where a finalized texture is sampled again, and the switch is read"""
     src = (ROOT / "gpu/vk/vk_texture.cpp").read_text(encoding="utf-8")
     for needle in ('#include "keep_resampled.h"',
-                   "keep_resampled::keep(overwritten, tex->gpu_written, tex->resampled, tex->bytes, resampled_kept, keep_resampled_max)",
+                   "keep_resampled::candidate(overwritten, tex->gpu_written, tex->resampled, frame_no - last) &&",
+                   "keep_resampled::keep(tex->bytes, resampled_total, keep_resampled_max)",
+                   "if (tex->resampled && frame_no - tex->last_frame <= keep_resampled::kMaxUnused) return false;",
                    "if (tex->gpu_written && tex->released) tex->resampled = true;", 'getenv("RX_VK_KEEP_RESAMPLED_MB")'):
         if needle not in src:
             raise SystemExit("vk_texture.cpp no longer has: " + needle)
+    if src.count("tex->resampled = false;") != src.count("tex->released = false;"):
+        raise SystemExit("vk_texture.cpp: each place a texture is drawn again (released = false) must clear resampled too")
     if "bool resampled = false;" not in (ROOT / "gpu/vk/vk_texture.h").read_text(encoding="utf-8"):
         raise SystemExit("vk_texture.h no longer has the resampled flag")
 

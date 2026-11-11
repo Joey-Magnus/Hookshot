@@ -1,5 +1,5 @@
-// keep_resampled::keep (gpu/vk/keep_resampled.h): the textures the GPU drew that the game samples again after finalizing them
-// stay through an eviction pass over the budget, up to a cap. tests/test_keep_resampled.py
+// keep_resampled (gpu/vk/keep_resampled.h): the textures the GPU drew that the game samples again after finalizing them, used
+// recently, stay through an eviction pass over the budget, up to a cap spent on the most recently used. tests/test_keep_resampled.py
 #include "../gpu/vk/keep_resampled.h"
 
 #include <cstdio>
@@ -14,19 +14,36 @@ static void expect(bool ok, const char* what) {
 }
 
 int main() {
-    const uint64_t MB = 1ull << 20, max = 1024 * MB;
+    const uint64_t MB = 1ull << 20, max = 512 * MB;
+    using keep_resampled::candidate;
     using keep_resampled::keep;
-    uint64_t kept = 0;
-    expect(keep(false, true, true, 288 * MB, kept, max) && kept == 288 * MB, "the 12288 x 12288 shadow map, sampled again: kept");
-    expect(keep(false, true, true, 32 * MB, kept, max) && kept == 320 * MB, "the 4096 x 4096 one too: both fit");
-    expect(!keep(true, true, true, 32 * MB, kept, max) && kept == 320 * MB, "drawn over since: nothing left to keep");
-    expect(!keep(false, false, true, 32 * MB, kept, max), "uploaded from the game's memory: made again from there");
-    expect(!keep(false, true, false, 32 * MB, kept, max), "never sampled again after finalizing: goes as before");
-    expect(!keep(false, true, true, 800 * MB, kept, max) && kept == 320 * MB, "past the cap: goes, the total unchanged");
-    expect(keep(false, true, true, 704 * MB, kept, max) && kept == max, "exactly up to the cap: kept");
-    expect(!keep(false, true, true, 1, kept, max), "the cap reached: nothing more");
-    uint64_t none = 0;
-    expect(!keep(false, true, true, 1, none, 0), "RX_VK_KEEP_RESAMPLED_MB=0: evicted as before");
+    using keep_resampled::kMaxUnused;
+
+    expect(candidate(false, true, true, 400), "the 12288 x 12288 shadow map, sampled again, unused 400 presents: a candidate");
+    expect(!candidate(true, true, true, 0), "drawn over since: nothing left to keep");
+    expect(!candidate(false, false, true, 0), "uploaded from the game's memory: made again from there");
+    expect(!candidate(false, true, false, 0), "never sampled again after finalizing: goes as before");
+    expect(candidate(false, true, true, kMaxUnused), "unused exactly 1,800 presents: still one");
+    expect(!candidate(false, true, true, kMaxUnused + 1), "unused longer (an area left behind): goes, as #2198's reserve lets it");
+
+    // within the cap: every candidate kept, the total unchanged
+    uint64_t total = 288 * MB + 32 * MB;
+    expect(keep(288 * MB, total, max) && keep(32 * MB, total, max) && total == 320 * MB, "both shadow maps fit: kept");
+    total = max;
+    expect(keep(1, total, max), "exactly the cap: kept");
+
+    // over the cap, oldest first: the oldest go until the rest fit, then the most recently used are kept
+    total = 288 * MB + 288 * MB + 32 * MB;   // (608 MB: oldest 288, then 288, then the newest 32)
+    expect(!keep(288 * MB, total, max) && total == 320 * MB, "the oldest 288 MB one goes, leaving 320 MB");
+    expect(keep(288 * MB, total, max), "the next fits now: kept");
+    expect(keep(32 * MB, total, max), "the newest: kept");
+    expect(total == 320 * MB, "kept ones leave the total");
+
+    uint64_t drift = 2;
+    expect(!keep(8, drift, 1) && drift == 0, "a total below a texture's bytes clamps at 0, not wraps");
+
+    uint64_t none = 64 * MB;
+    expect(!keep(1, none, 0), "RX_VK_KEEP_RESAMPLED_MB=0: evicted as before");
     if (failures) return EXIT_FAILURE;
     std::printf("keep resampled: all checks passed\n");
     return EXIT_SUCCESS;
