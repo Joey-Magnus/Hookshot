@@ -645,7 +645,6 @@ constexpr int kAutoPreset = 6;
 uint64_t auto_for = 0;               // (the fingerprint of the hardware the options' Auto settings were chosen for: auto_for=)
 uint64_t auto_fp = 0;                // (this PC's, menu_auto_for_gpu)
 uint64_t auto_tuned = 0;             // (the fingerprint the measured tuning in play finished for: auto_tuned=)
-int auto_start = 0;                  // (the Render resolution Auto chose, the tuning's ceiling; 0: this run's own)
 void apply_auto();   // (below: the Auto preset's rows)
 void apply_preset(int p) {
     if (p == kAutoPreset) {
@@ -696,7 +695,6 @@ void apply_auto() {
     opts.dlss = c.upscaler;
     if (c.resolution) opts.resolution = ur::snap_render(c.upscaler, c.resolution);
     opts.output_res = c.output;
-    auto_start = opts.resolution;
     auto_tuned = 0;   // (chosen again: measured again in play)
     opts.preset = kAutoPreset;   // (apply_preset set the tier's number)
     auto_for = auto_fp;          // (chosen for this PC, whether at a start or on the menu's row)
@@ -3979,8 +3977,9 @@ bool walk_to(State state, At at, Step step, int limit) {
 }
 
 /// (hookshot) The Quality preset Auto (this PC)'s measured tuning in play (auto_settings.h tune): each of the replay's 120-present
-/// windows (vk_replay.cpp), the Render resolution one step lighter while the GPU takes over 90% of the cap's frame time, or one
-/// heavier under 50%, never past what Auto chose; at most two steps, then done for this PC (auto_tuned=). Not with Frame
+/// windows (vk_replay.cpp), the Render resolution one step lighter while frames are missed with the GPU over 90% of the cap's
+/// frame time, or one heavier while the cap holds with the GPU under 50%, up to the best mode that still upscales (never
+/// native); at most two steps, then done for this PC (auto_tuned=). Not with Frame
 /// generation on (the frames shown are not the game's) nor with another preset. RX_VK_AUTO_TUNE=0: off
 void menu_auto_tune(double gpu_ms, double draws, double fps) {
     static ::auto_settings::Tuning tuning;
@@ -3994,7 +3993,8 @@ void menu_auto_tune(double gpu_ms, double draws, double fps) {
     const float cap = target > 0 ? (float)(1000.0 / target) : refresh > 0 ? (float)refresh : 60.0f;
     const int u = upscaler(), v = opts.resolution;
     if (ur::full_scale(u) || v == 0) return;   // (Native, or Auto's dynamic share: no steps to measure along)
-    const int ceiling = auto_start ? auto_start : v;
+    // (heavier: up to the best mode that still upscales, past what the profile chose; never native: auto_settings.h best_step)
+    const int ceiling = ::auto_settings::best_step(u);
     const int lighter = ur::step(u, v, 1), heavier = ur::step(u, v, -1);
     const bool can_lighter = lighter != 0 && ur::percent(lighter) < ur::percent(v);
     const bool can_heavier = heavier != 0 && ur::percent(heavier) > ur::percent(v) && ur::percent(heavier) <= ur::percent(ceiling);
@@ -4005,13 +4005,13 @@ void menu_auto_tune(double gpu_ms, double draws, double fps) {
         env_release(&opts.resolution);
         samplers_changed();   // (the upscalers' texture LOD bias follows the 3D's share, as when the row is set)
         menu_refresh = true;
-        logf("vk: Auto (this PC), measured in play: the GPU at %.1f ms a frame against %.1f ms at %.0f fps: Render resolution %d%% -> "
-             "%d%%", gpu_ms, 1000.0 / cap, cap, ur::percent(v), ur::percent(opts.resolution));
+        logf("vk: Auto (this PC), measured in play: %.0f fps of %.0f, the GPU at %.1f ms a frame of %.1f: Render resolution %d%% -> "
+             "%d%%", tuning.fps_mid, cap, tuning.gpu_mid, 1000.0 / cap, ur::percent(v), ur::percent(opts.resolution));
     } else {
         auto_tuned = auto_for;
-        logf("vk: Auto (this PC), measured in play: %s (the GPU at %.1f ms a frame against %.1f ms, %.0f fps): Render resolution "
-             "%d%% kept", verdict == ::auto_settings::CPU_BOUND ? "the CPU holds the frame rate" : "settled", gpu_ms, 1000.0 / cap,
-             fps, ur::percent(v));
+        logf("vk: Auto (this PC), measured in play: %s (%.0f fps of %.0f, the GPU at %.1f ms a frame of %.1f): Render resolution "
+             "%d%% kept", verdict == ::auto_settings::CPU_BOUND ? "the CPU holds the frame rate" : "settled", tuning.fps_mid, cap,
+             tuning.gpu_mid, 1000.0 / cap, ur::percent(v));
     }
     save();
 }

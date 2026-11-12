@@ -84,12 +84,21 @@ int main() {
     expect(fingerprint(h, 0x10de, 0x2782) == fingerprint(moved, 0x10de, 0x2782), "a few MB more memory: the same fingerprint");
 
     // (the tuning in play)
+    expect(best_step(DLSS) == RES_QUALITY && best_step(FSR4) == RES_QUALITY && best_step(3) == RES_QUALITY &&
+           best_step(GAME) == 1 && best_step(6) == 1, "the ceiling: Quality with an upscaler, 100% with the game's own or Off");
     {
         Tuning t;
-        for (int i = 0; i < kWindows - 1; i++) expect(tune(t, 17.5f, 900, 57, 60, true, true) == WAIT, "gathering");
-        expect(tune(t, 17.5f, 900, 57, 60, true, true) == LIGHTER, "the GPU over 90% of 16.7 ms: one step lighter");
+        for (int i = 0; i < kWindows - 1; i++) expect(tune(t, 17.5f, 900, 52, 60, true, true) == WAIT, "gathering");
+        expect(tune(t, 17.5f, 900, 52, 60, true, true) == LIGHTER, "frames missed, the GPU over 90% of 16.7 ms: one step lighter");
+        expect(t.gpu_mid == 17.5f && t.fps_mid == 52, "the middle values the verdict was made on, for the log");
         for (int i = 0; i < kWindows - 1; i++) tune(t, 6.0f, 900, 60, 60, true, true);
         expect(tune(t, 6.0f, 900, 60, 60, true, true) == KEEP && t.done, "after a step down, never back up: done");
+    }
+    {
+        Tuning t;
+        for (int i = 0; i < kWindows - 1; i++) tune(t, 15.8f, 900, 60, 60, true, true);
+        expect(tune(t, 15.8f, 900, 60, 60, true, true) == KEEP && t.done,
+               "the cap held with the GPU at 95%: the picture kept (no step down without missed frames)");
     }
     {
         Tuning t;
@@ -101,9 +110,14 @@ int main() {
     {
         Tuning t;
         for (int i = 0; i < kWindows - 1; i++) tune(t, 5.0f, 900, 60, 60, true, true);
-        expect(tune(t, 5.0f, 900, 60, 60, true, true) == HEAVIER, "the GPU at 30%: one step heavier");
+        expect(tune(t, 5.0f, 900, 60, 60, true, true) == HEAVIER, "the cap held, the GPU at 30%: one step heavier");
         for (int i = 0; i < kWindows - 1; i++) tune(t, 5.0f, 900, 60, 60, true, false);
-        expect(tune(t, 5.0f, 900, 60, 60, true, false) == KEEP, "back at the profile's start: no further");
+        expect(tune(t, 5.0f, 900, 60, 60, true, false) == KEEP, "at the best step: no further");
+    }
+    {
+        Tuning t;
+        for (int i = 0; i < kWindows - 1; i++) tune(t, 5.0f, 900, 50, 60, true, true);
+        expect(tune(t, 5.0f, 900, 50, 60, true, true) == CPU_BOUND, "frames missed with the GPU idle: never a step up");
     }
     {
         Tuning t;

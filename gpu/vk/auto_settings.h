@@ -127,11 +127,14 @@ inline uint64_t fingerprint(const Hardware& h, uint32_t vendor_id, uint32_t devi
 // The measured tuning in play: the render resolution moved toward what this PC holds at its frame rate cap. Each window is the
 // replay's 120 presents (vk_replay.cpp): the GPU's time a frame, the draws a frame and the frame rate. Only windows of play count
 // (150 draws a frame or more, as the control bridge's "play"; menus and loading screens draw fewer). After kWindows of them,
-// their middle values decide:
-// - the frame rate is short of the cap while the GPU is idle for a quarter of the frame or more: the CPU holds it (the game's
+// their middle values decide, lowering the picture only where frames are missed and raising it only with room to spare:
+// - frames missed (under 95% of the cap) while the GPU is idle for a quarter of the frame or more: the CPU holds it (the game's
 //   threads, the replay), and a smaller picture would not help: done, nothing changed
-// - the GPU takes over 90% of the cap's frame time: one step smaller (lighter)
-// - under 50%: one step larger, never past the tier's start (the profile's own choice): what Auto chose was for the card's memory
+// - frames missed and the GPU over 90% of the cap's frame time: one step smaller (lighter). A PC that holds its cap keeps its
+//   picture however busy the GPU is
+// - the cap held and the GPU under 50% of its frame time: one step larger, past what the profile chose (the memory tier sets
+//   the budgets, not how fast the GPU is) up to the best mode that still upscales (best_step: Quality, or the game's own at
+//   100%), never native (DLAA, FSR 4's native AA), whose larger images 8 GB cards ran out of memory with
 // - else: done
 // At most kMaxSteps changes in all; a step down is never followed by a step up (no seesaw). Then done until the hardware changes
 constexpr int kWindows = 8;
@@ -143,23 +146,28 @@ struct Tuning {
     int steps = 0;
     bool went_down = false;
     bool done = false;
+    float gpu_mid = 0, fps_mid = 0;   // (the middle values the last verdict was made on: for the log)
 };
 inline float middle(float* v, int n) {   // (the median; sorts v)
     for (int i = 1; i < n; i++)
         for (int j = i; j > 0 && v[j] < v[j - 1]; j--) { const float t = v[j]; v[j] = v[j - 1]; v[j - 1] = t; }
     return n % 2 ? v[n / 2] : (v[n / 2 - 1] + v[n / 2]) / 2;
 }
-// One window: WAIT while gathering, else the verdict. cap_fps: the frame rate cap's (the display's refresh when uncapped);
-// can_lighter, can_heavier: whether the render resolution has a step that way (heavier: not past the profile's start)
+// The largest Render resolution the tuning raises to for an upscaler (upscaler_rows.h's): Quality (67%) for DLSS, FSR 3.1 and
+// FSR 4, 100% for the game's own and Off
+inline int best_step(int upscaler) { return upscaler == 1 || upscaler == 3 || upscaler == 4 ? RES_QUALITY : 1; }
+// One window: WAIT while gathering, else the verdict. cap_fps: the cap the game runs to (the display's refresh when uncapped);
+// can_lighter, can_heavier: whether the render resolution has a step that way (heavier: not past best_step)
 inline Verdict tune(Tuning& t, float gpu_ms, float draws, float fps, float cap_fps, bool can_lighter, bool can_heavier) {
     if (t.done || draws < 150 || !(gpu_ms > 0) || !(fps > 0) || !(cap_fps > 0)) return WAIT;
     t.gpu_ms[t.n] = gpu_ms, t.fps[t.n] = fps;
     if (++t.n < kWindows) return WAIT;
     const float g = middle(t.gpu_ms, t.n), f = middle(t.fps, t.n), budget = 1000.0f / cap_fps;
-    t.n = 0;
-    if (f < cap_fps * 0.95f && g < 0.75f * (1000.0f / f)) return t.done = true, CPU_BOUND;
-    if (g > 0.9f * budget && can_lighter && t.steps < kMaxSteps) return t.steps++, t.went_down = true, LIGHTER;
-    if (g < 0.5f * budget && can_heavier && !t.went_down && t.steps < kMaxSteps) return t.steps++, HEAVIER;
+    t.n = 0, t.gpu_mid = g, t.fps_mid = f;
+    const bool missed = f < cap_fps * 0.95f;
+    if (missed && g < 0.75f * (1000.0f / f)) return t.done = true, CPU_BOUND;
+    if (missed && g > 0.9f * budget && can_lighter && t.steps < kMaxSteps) return t.steps++, t.went_down = true, LIGHTER;
+    if (!missed && g < 0.5f * budget && can_heavier && !t.went_down && t.steps < kMaxSteps) return t.steps++, HEAVIER;
     t.done = true;
     return KEEP;
 }

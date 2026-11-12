@@ -386,9 +386,10 @@ HDR, Detail, and GPU and memory (last: the rows to change when something is wron
 - **Auto (this PC)**, which a first start begins on, chooses for the PC it runs on: the memory tier from the card's
   video memory (an integrated GPU, a Steam Deck or a card without mesh shaders at Minimum), DLSS on an NVIDIA RTX card
   or FSR 4 on an AMD RX 9000 where the build has them (else the game's own upscaler), and the screen's size as the
-  Output resolution where the tier has the memory for it. In the first minute of play it then measures the GPU and moves
-  the Render resolution down a step while the GPU takes over 90% of the frame (up a step under 50%, never past its own
-  choice; at most two steps). It chooses again when the card or the screen changes. `hookshot_log.txt`'s
+  Output resolution where the tier has the memory for it. In the first minute of play it then measures the GPU: while
+  frames are missed with the GPU over 90% busy it lowers the Render resolution a step, and while the frame rate cap holds
+  with the GPU under half busy it raises it a step, up to the best mode that still upscales (DLSS or FSR Quality, or 100%
+  with the game's own; never DLAA or native AA). At most two steps; a PC that holds its cap keeps its picture. It chooses again when the card or the screen changes. `hookshot_log.txt`'s
   `Auto (this PC)` lines say what it chose and why.
 - **Menu size** is how large the menu, the FPS counter and the start-up screen are drawn: Medium unless you choose Small
   (a desk) or Large (a TV across the room). It stays the same whether you use a controller or the keyboard and mouse.
