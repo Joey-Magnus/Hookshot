@@ -97,6 +97,28 @@ public sealed record MakeGameCommand(
         return new MakeGameCommand(tools.Python, args, tools.ToolsRoot, env);
     }
 
+    /// make_game.py --check: is this the game, and the version these tools build? (the 2.x Builders' check: --nup, or the exefs
+    /// folder alone). The same program and environment as a build with no DLSS; a .nup is read into &lt;work&gt;/probe
+    public static MakeGameCommand ForCheck(Toolchain tools, BuildSource source, Platform platform, LauncherHome home, string launcher,
+                                           string? work = null, Func<string, bool>? directoryExists = null)
+    {
+        var build = For(tools, new BuildRequest(new BuildSource.Update("."), null, Work: work), platform, home, launcher, directoryExists);
+        var args = new List<string> { "-I", tools.MakeGame, "--check" };
+        switch (source)
+        {
+            case BuildSource.Nup n:
+                args.AddRange(new[] { "--nup", n.Path });
+                break;
+            case BuildSource.Folders f:
+                args.AddRange(new[] { "--exefs", f.Exefs });
+                break;
+            default:
+                throw new ArgumentException("Only game files are checked, not a game folder.", nameof(source));
+        }
+        args.AddRange(new[] { "--work", work ?? home.Work });
+        return build with { Arguments = args };
+    }
+
     public ProcessStartInfo StartInfo()
     {
         var si = new ProcessStartInfo(FileName)

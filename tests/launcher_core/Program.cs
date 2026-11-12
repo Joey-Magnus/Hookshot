@@ -9,7 +9,7 @@ using HookshotLauncher.Core;
 ///     LauncherCoreTests <vectors.json> <tests/fixtures/launcher> <scratch folder>
 /// vectors.json: tests/test_update_tracks.py's TRACKS, ORDER and LIST, read there with ast (test_launcher_core.py), so the
 /// launcher is held to the same vectors as the game, the setup and the Linux updater.
-static class Program
+static partial class Program
 {
     static int checks;
     static string scratch = "";
@@ -67,6 +67,7 @@ static class Program
         CommandLineChecks();
         SavesChecks.Run(Folder("saves"));
         Utf8Checks();
+        await ScreenChecks();
         checks += SavesChecks.Count;
         Console.WriteLine($"launcher core: {checks} checks passed");
         return 0;

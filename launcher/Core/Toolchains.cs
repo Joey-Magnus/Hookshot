@@ -355,7 +355,7 @@ public sealed class Toolchains
     }
 
     /// A folder and everything in it; a link in it is removed, never followed
-    internal static void DeleteTree(string dir)
+    public static void DeleteTree(string dir)
     {
         var info = new DirectoryInfo(dir);
         if (info.LinkTarget != null) { info.Delete(); return; }

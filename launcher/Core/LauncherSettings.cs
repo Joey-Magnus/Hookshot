@@ -26,6 +26,29 @@ public sealed class LauncherSettings
     /// A new build, or an update, takes its saves from the build chosen as the source when other builds exist (Windows: each
     /// game folder keeps its own saves; Linux builds share theirs). Saves.MoveOnBuild
     public bool MoveSaves { get; set; } = true;
+    /// Where new builds go, each version in its own folder; null: DefaultBuildsFolder
+    public string? BuildsFolder { get; set; }
+    /// Ask GitHub for each channel's newest version when the launcher starts
+    public bool CheckUpdates { get; set; } = true;
+
+    /// The folder builds go in when none was chosen: make_game.py's own default game folder's parent, ~/Games/Hookshot
+    /// (%USERPROFILE%\Games\Hookshot on Windows)
+    public static string DefaultBuildsFolder(Func<string, string?>? getenv = null) =>
+        Path.Combine(LauncherHome.Home(getenv ?? Environment.GetEnvironmentVariable), "Games", "Hookshot");
+
+    public string BuildsFolderOrDefault(Func<string, string?>? getenv = null) =>
+        string.IsNullOrWhiteSpace(BuildsFolder) ? DefaultBuildsFolder(getenv) : BuildsFolder;
+
+    /// A new build's folder: the version's name in the builds folder, with " (2)" and so on when that is taken by something that
+    /// is not the build being replaced
+    public static string FolderFor(string buildsFolder, string version, Func<string, bool>? taken = null)
+    {
+        taken ??= p => Directory.Exists(p) || File.Exists(p);
+        var name = Versions.IsTagName(version) ? version : "Hookshot";
+        var path = Path.Combine(buildsFolder, name);
+        for (var n = 2; taken(path); n++) path = Path.Combine(buildsFolder, $"{name} ({n})");
+        return path;
+    }
 
     /// The saved settings, or the defaults when there are none or they cannot be read
     public static LauncherSettings Load(string path)

@@ -13,6 +13,15 @@ public sealed class BuildEntry
     public bool Default { get; set; }
     public DateTimeOffset Created { get; set; }
     public DateTimeOffset Updated { get; set; }
+    /// What the launcher built it with (null for a build it did not make: a 2.x folder handed over), so that its update can be
+    /// built from the same game files and the home can say what it has
+    public string? Nup { get; set; }
+    public string? Romfs { get; set; }
+    public string? Exefs { get; set; }
+    public bool? Dlss { get; set; }
+    public bool? Fsr { get; set; }
+    /// Its folder's size in bytes when it was last measured; null: not yet
+    public long? Bytes { get; set; }
 }
 
 public sealed class RegistryFile
@@ -136,6 +145,27 @@ public sealed class BuildRegistry
         return true;
     }
 
+    /// An update built into folder takes the row of the build it updates (old): its id, its place in the list and whether it is
+    /// the default stay; its folder, version and channel are the new build's. When another row already lists folder, that row
+    /// goes (one entry per folder). The old folder stays on the disk
+    public BuildEntry Replace(string oldId, string folder, string? version, string? channel)
+    {
+        var entry = Find(oldId) ?? throw new KeyNotFoundException("No build " + oldId);
+        if (FindByFolder(folder) is { } other && other != entry)
+        {
+            builds.Remove(other);
+            if (other.Default) entry.Default = true;
+        }
+        if (!SameFolder(entry.Folder, folder)) entry.Name = DefaultName(folder);
+        entry.Folder = folder;
+        entry.Version = version ?? entry.Version;
+        entry.Channel = Versions.IsChannel(channel) ? channel! : Versions.TrackOf(entry.Version);
+        entry.Updated = now();
+        entry.Bytes = null;
+        Normalize();
+        return entry;
+    }
+
     public void SetDefault(string id)
     {
         if (Find(id) == null) throw new KeyNotFoundException("No build " + id);
@@ -162,13 +192,36 @@ public sealed class BuildRegistry
     }
 
     /// A build's game folder deleted from the disk: only a folder make_game.py made (its stamp or bin/hookshot), never another
-    /// folder a list entry might name. The entry itself is removed with Remove
-    public static void DeleteFolder(string folder, Platform platform)
+    /// folder a list entry might name. Not a link either (deleting it would free nothing), nor the home folder or one that holds
+    /// it, nor one that holds a folder of keep: the other builds and the launcher's home. (A 2.x install in ~/Games/Hookshot holds
+    /// the launcher's own builds, ~/Games/Hookshot/&lt;version&gt;, while that is the builds folder.) The entry itself is removed with
+    /// Remove
+    public static void DeleteFolder(string folder, Platform platform, IEnumerable<string>? keep = null, Func<string, string?>? getenv = null)
     {
         var full = Path.GetFullPath(folder);
         if (Path.GetPathRoot(full) == full) throw new IOException("Will not delete a drive's root: " + folder);
         if (!GameFolder.IsGameFolder(full, platform))
             throw new IOException("This folder is not a Hookshot game folder, so the launcher does not delete it: " + folder);
+        if (new DirectoryInfo(full).LinkTarget != null)
+            throw new IOException("This folder is a link to another one, so the launcher does not delete it: " + folder);
+        if (Holds(full, LauncherHome.Home(getenv ?? Environment.GetEnvironmentVariable)))
+            throw new IOException("This folder holds your home folder, so the launcher does not delete it: " + folder);
+        if ((keep ?? Array.Empty<string>()).FirstOrDefault(k => Holds(full, k)) is { } other)
+            throw new IOException($"This folder holds {other}, which the launcher keeps, so it does not delete it: {folder}");
         Toolchains.DeleteTree(full);
+    }
+
+    /// path is folder or somewhere under it
+    static bool Holds(string folder, string path)
+    {
+        if (SameFolder(folder, path)) return true;
+        var windows = OperatingSystem.IsWindows() || folder.Contains('\\') || path.Contains('\\');
+        string Norm(string p)
+        {
+            try { p = Path.GetFullPath(p); } catch (Exception) { }
+            return Path.TrimEndingDirectorySeparator(p);
+        }
+        var sep = windows ? "\\" : "/";
+        return Norm(path).StartsWith(Norm(folder) + sep, windows ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
     }
 }

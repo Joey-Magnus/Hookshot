@@ -44,6 +44,18 @@ public static class GameFolder
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { return null; }
     }
 
+    /// Built with NVIDIA DLSS: its runtime in ngx/ (hookshot_builder.folder_has_dlss: libnvidia-ngx-dlss.so*; on Windows nvngx_dlss.dll)
+    public static bool HasDlss(string folder)
+    {
+        try
+        {
+            return Directory.EnumerateFiles(Path.Combine(folder, "ngx")).Select(Path.GetFileName)
+                .Any(n => n != null && (n.StartsWith("libnvidia-ngx-dlss.so", StringComparison.Ordinal)
+                                        || n.Equals("nvngx_dlss.dll", StringComparison.OrdinalIgnoreCase)));
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException) { return false; }
+    }
+
     /// A folder make_game.py made: its stamp, or the game in bin/. Only such a folder may be deleted from the launcher
     public static bool IsGameFolder(string folder, Platform platform) =>
         Directory.Exists(folder) && (File.Exists(Path.Combine(folder, StampName)) || IsBuilt(folder, platform));

@@ -24,7 +24,16 @@ public sealed record SaveSet(string Owner, string Display, string? Folder, IRead
 public sealed record SaveCopy(string Source, string Target, string? Backup, IReadOnlyList<string> Slots, IReadOnlyList<string> Files, bool KeptSettings, bool Dry);
 
 /// A copy refused, and why (oot_saves.Fail)
-public sealed class SaveFailure(string message) : Exception(message);
+public sealed class SaveFailure(string message, SaveRefusal reason = SaveRefusal.Other, IReadOnlyList<string>? who = null) : Exception(message)
+{
+    /// Why the copy was refused, for the window to say it its own way (the message says it the script's way)
+    public SaveRefusal Reason { get; } = reason;
+    /// Running: what runs; Waiting: the program whose save waits
+    public IReadOnlyList<string> Who { get; } = who ?? Array.Empty<string>();
+}
+
+/// Running: a game or an emulator runs; Waiting: NX2navi has a save waiting in profile/save-tx; Other: anything else
+public enum SaveRefusal { Other, Running, Waiting }
 
 /// The environment the save folders are worked out from: the platform and its variables (HOME, XDG_DATA_HOME, APPDATA,
 /// LOCALAPPDATA), so the tests point them all into one temporary folder as tests/test_oot_saves.py does
@@ -398,9 +407,10 @@ public static class Saves
             foreach (var side in new[] { src, dst })
                 if (PendingCommit(side) is { } tx)
                     throw new SaveFailure($"NX2navi still has a save waiting in {tx}, which it loads instead of {side}: start NX2navi and quit it from " +
-                                          "the game, then copy.");
+                                          "the game, then copy.", SaveRefusal.Waiting, new[] { "NX2navi" });
         if (!dryRun && !force && (running ?? (() => Running(Platforms.Current)))() is { Count: > 0 } busy)
-            throw new SaveFailure($"Close {string.Join(" and ", busy)} first: a running game can write its save again and undo the copy.");
+            throw new SaveFailure($"Close {string.Join(" and ", busy)} first: a running game can write its save again and undo the copy.",
+                                  SaveRefusal.Running, busy);
         var stamp = (now ?? (() => DateTime.Now))().ToString("yyyyMMdd-HHmmss", System.Globalization.CultureInfo.InvariantCulture);
         var backup = System.IO.Path.Combine(backupRoot, $"{command}-{name}-{stamp}");
         var at = backup;

@@ -77,6 +77,11 @@ public sealed class BuildStage
 
     internal double From, Size;
 
+    /// Its share of the overall bar, 0..1 (the stages this build has add up to 1)
+    public double Weight => Size;
+    /// Where it starts on the overall bar, 0..1
+    public double Start => From;
+
     internal BuildStage(string id, string title, double from, double size)
     {
         Id = id;
