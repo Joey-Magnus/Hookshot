@@ -28,6 +28,7 @@ RUN_ALL_ARGS = ["--cxx", "{cxx}"]
 ROOT = Path(__file__).resolve().parents[1]
 
 FIXTURE = r'''#include "gpu/vk/vk_menu_keys.h"
+#include "host/hos_fopen_read.h"
 #include <algorithm>
 #include <atomic>
 #include <cstdio>
@@ -258,7 +259,7 @@ def main():
         raise SystemExit("FAIL: vk_menu.h: the menu's Options are missing")
     # (menu_init's reading of the options file, its moves of old defaults included, and the version save() writes now)
     init = menu[menu.index("void menu_init() {"):]
-    load_at = init.index('    if (FILE* f = fopen(ini_path().c_str(), "r")) {')
+    load_at = init.index('    if (FILE* f = hos_fopen_read(ini_path().c_str())) {')
     load = init[load_at:init.index("    first_start = !has_options;", load_at)]
     key_at = menu.index("const char* ini_key(const Row& r) {")
     ini_key = menu[key_at:menu.index("\n}\n", key_at) + 3]

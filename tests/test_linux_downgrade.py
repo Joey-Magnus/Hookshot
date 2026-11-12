@@ -214,7 +214,7 @@ class Admission(unittest.TestCase):
         received = []
         def argument(name):
             return args[args.index(name) + 1] if name in args else None
-        namespace = dict(sys=types.SimpleNamespace(argv=args), _arg=argument,
+        namespace = dict(sys=types.SimpleNamespace(argv=args), _arg=argument, linux_update=linux_update,
                          Builder=lambda **kw: received.append(kw) or types.SimpleNamespace(mainloop=lambda: None))
         exec(compile(ast.Module(body=[main], type_ignores=[]), "production-main", "exec"), namespace)
         namespace["main"]()

@@ -38,6 +38,7 @@ def between(text, first, last):
 PRELUDE = r"""
 #include <stdarg.h>
 #include <stdio.h>
+#include "HOS_FOPEN_HEADER"   // (the game's start-up reads: host/hos_fopen_read.h)
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
@@ -154,7 +155,7 @@ class OcarinaNoteBindingsTests(unittest.TestCase):
             tmp = Path(tmp)
             (tmp / "hookshot_options.ini").write_text(
                 "key_move_up=90,0\npad_a=5\nkey_note_y=78,0\n", encoding="utf-8")
-            (tmp / "t.c").write_text(PRELUDE + code + MAIN, encoding="utf-8")
+            (tmp / "t.c").write_text((PRELUDE + code + MAIN).replace("HOS_FOPEN_HEADER", (ROOT / "host" / "hos_fopen_read.h").as_posix()), encoding="utf-8")
             binary = tmp / ("t.exe" if sys.platform == "win32" else "t")
             build = subprocess.run([compiler, "-std=gnu11", "-Wall", "-Wno-unused-function", "-I", str(ROOT / "gpu" / "vk"),
                                     "-I", str(ROOT / "gpu"), str(tmp / "t.c"), "-o", str(binary)], text=True, capture_output=True)

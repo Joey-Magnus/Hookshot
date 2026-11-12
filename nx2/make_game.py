@@ -112,7 +112,7 @@ def say(*words):
 FOLDER_WRITES = ["bin", "image.bin", "hookshot_version.txt", "language.txt", "hookshot.png", "hookshot_pipelines.bin",
                  "hookshot_pipeline_states_shipped.bin", "hookshot_shaders.bin", "prompts", "ngx", "ffx", "romfs", ".game",
                  ".hookshot_exefs", ".hookshot_romfs", ".hookshot_romfs_checked", ".hookshot_romfs_heads",
-                 ".hookshot_write_check"]
+                 ".hookshot_write_check", ".hookshot_builder_home"]
 
 
 def refuse_written_links(out, launcher_dir="bin"):

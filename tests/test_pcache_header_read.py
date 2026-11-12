@@ -30,6 +30,8 @@ def main():
     args = parser.parse_args()
     source = (ROOT / "gpu/vk/vk_draw.cpp").read_text(encoding="utf-8")
     reader = function(source, "std::vector<uint8_t> pcache_file_read(const std::string& path)")
+    limit = source[source.index("constexpr int64_t kPcacheMax"):]
+    limit = limit[:limit.index("\n")]
     fixture = r'''
 #define _CRT_SECURE_NO_WARNINGS   /* (Windows: fopen is not deprecated here) */
 #include <cstdint>
@@ -39,6 +41,7 @@ def main():
 #include <string>
 #include <vector>
 #include <vulkan/vulkan_core.h>
+#include "hos_fopen_read.h"
 #ifndef _WIN32   /* (Windows has _fseeki64 and _ftelli64 themselves, and no fseeko) */
 #define _fseeki64 fseeko
 #define _ftelli64 ftello
@@ -48,7 +51,8 @@ struct { VkPhysicalDeviceProperties props; } dev;
 static size_t bytes_read;
 static size_t counted_fread(void* p, size_t s, size_t n, FILE* f) { const size_t r = std::fread(p, s, n, f); bytes_read += r * s; return r; }
 #define fread counted_fread
-''' + reader + r'''
+static void logf(const char*, ...) {}
+''' + limit + "\n" + reader + r'''
 static std::vector<uint8_t> cache(uint32_t vendor, uint32_t device, uint8_t uuid0, size_t body, uint32_t head_size = 32) {
     std::vector<uint8_t> d(32 + body);
     const uint32_t version = VK_PIPELINE_CACHE_HEADER_VERSION_ONE;
@@ -95,7 +99,7 @@ int main(int argc, char** argv) {
     with tempfile.TemporaryDirectory() as d:
         src, exe = Path(d) / "t.cpp", Path(d) / "t"
         src.write_text(fixture, encoding="utf-8")
-        subprocess.run([args.cxx, "-std=c++20", "-Wall", "-Wextra", "-Werror", "-I", args.headers, str(src), "-o", str(exe)],
+        subprocess.run([args.cxx, "-std=c++20", "-Wall", "-Wextra", "-Werror", "-I", args.headers, "-I", str(ROOT / "host"), str(src), "-o", str(exe)],
                        check=True)
         subprocess.run([str(exe), str(Path(d) / "cache.bin")], check=True)
     print("ok")

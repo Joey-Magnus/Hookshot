@@ -17,6 +17,7 @@ static void hos_log(const char *format, ...) { (void)format; }
 #define GP(value) ((void *)(uintptr_t)(value))
 #define G64(value) (*(uint64_t *)GP(value))
 #define G32(value) (*(uint32_t *)GP(value))
+static void *hos_guest_range(uint64_t a, uint64_t n) { (void)n; return a ? GP(a) : NULL; }   /* (the test's addresses are host ones) */
 #include "audio_biquad.inc"
 
 #define VOICE_FLOAT imp__ZN2nn5audio29SetVoiceBiquadFilterParameterEPNS0_9VoiceTypeEiRKNS0_22TBiquadFilterParameterIfEE
