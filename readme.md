@@ -201,6 +201,9 @@ To go back, install the [latest release](https://github.com/NotRexed/Hookshot/re
   arguments](#running-the-game-from-the-command-line)).
   To carry on with a save from an emulator (Lichii, Eglantine, Orchid, ...) or NX2navi, or to take yours there, see
   [using a save from an emulator](docs/saves.md).
+- The game does not write through a symbolic link (or, on Windows, a junction) at the name of a file it writes itself,
+  such as `hookshot_options.ini`, `mouse_sens.txt` or a pipeline cache: it leaves the file as it is and says so once in
+  the log. To keep these files elsewhere, link the folder that holds them, not the file.
 - To uninstall, delete the game folder, the builder's folder and the shortcuts.
 
 ### What Hookshot connects to
