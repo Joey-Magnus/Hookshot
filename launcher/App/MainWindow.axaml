@@ -144,6 +144,7 @@
             <DataTemplate DataType="vm:BuildStepViewModel"><views:BuildStepView/></DataTemplate>
             <DataTemplate DataType="vm:ReadyViewModel"><views:ReadyView/></DataTemplate>
             <DataTemplate DataType="vm:ProblemViewModel"><views:ProblemView/></DataTemplate>
+            <DataTemplate DataType="vm:ReportViewModel"><views:ReportView/></DataTemplate>
             <DataTemplate DataType="vm:SettingsViewModel"><views:SettingsView/></DataTemplate>
             <DataTemplate DataType="vm:SavesViewModel"><views:SavesView/></DataTemplate>
             <DataTemplate DataType="vm:SavesConfirmViewModel"><views:SavesConfirmView/></DataTemplate>

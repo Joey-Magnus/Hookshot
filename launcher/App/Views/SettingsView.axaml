@@ -56,6 +56,15 @@
           </StackPanel>
         </Grid>
         <CheckBox Classes="tick" Content="Check for updates when the launcher starts" IsChecked="{Binding CheckUpdates}"/>
+        <Grid ColumnDefinitions="*,Auto" Margin="0,6,0,0">
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock Text="Problem reports" FontWeight="SemiBold"/>
+            <TextBlock FontSize="12" Foreground="{StaticResource InkSoft}" TextWrapping="Wrap" MaxWidth="460"
+                       Text="When a build stops or the game closes unexpectedly: the version, your graphics card and system, and the log, with your user name taken out. No saves or game files."/>
+          </StackPanel>
+          <ComboBox Grid.Column="1" Classes="dd" ItemsSource="{Binding ReportOptions}" SelectedItem="{Binding Reports}"
+                    PlaceholderText="Ask the first time" VerticalAlignment="Center" MinWidth="170"/>
+        </Grid>
       </StackPanel>
     </ScrollViewer>
   </DockPanel>

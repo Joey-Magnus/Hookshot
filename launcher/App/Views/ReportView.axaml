@@ -1,0 +1,59 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:HookshotLauncher.ViewModels"
+             xmlns:c="using:HookshotLauncher.Controls"
+             x:Class="HookshotLauncher.Views.ReportView"
+             x:DataType="vm:ReportViewModel">
+  <DockPanel>
+    <Grid DockPanel.Dock="Bottom" ColumnDefinitions="*,Auto" Margin="0,14,0,0">
+      <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+        <Button Classes="link soft" Content="{Binding PreviewButton}" Command="{Binding TogglePreviewCommand}"/>
+        <Ellipse Width="3" Height="3" Fill="{StaticResource InkFaint}" Margin="12,0" VerticalAlignment="Center"/>
+        <Button Classes="link soft" Content="Copy report" Command="{Binding CopyCommand}"/>
+      </StackPanel>
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
+        <!-- (the first time: the player's choice, which the settings keep) -->
+        <Button Content="Never send" Command="{Binding NeverCommand}" IsVisible="{Binding AskConsent}"/>
+        <Button Content="Just this once" Command="{Binding OnceCommand}" IsVisible="{Binding AskConsent}"/>
+        <Button Classes="primary" Content="Always send" Command="{Binding AlwaysCommand}" IsVisible="{Binding AskConsent}"/>
+        <!-- (asked before: each time) -->
+        <Button Content="Not now" Command="{Binding CloseCommand}" IsVisible="{Binding AskEach}"/>
+        <Button Classes="primary" Content="{Binding SendLabel}" Command="{Binding SendCommand}" IsVisible="{Binding AskEach}"/>
+        <Button Content="Close" Command="{Binding CloseCommand}" IsVisible="{Binding !AskEach}"/>
+      </StackPanel>
+    </Grid>
+    <StackPanel>
+      <TextBlock Classes="heading" Text="{Binding Headline}"/>
+      <TextBlock Classes="sub" Text="{Binding Sub}"/>
+      <Border Margin="0,22,0,0" Padding="24,22" CornerRadius="10" BorderBrush="#55E2776B" BorderThickness="1">
+        <Border.Background>
+          <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#14E2776B"/>
+            <GradientStop Offset="0.7" Color="#00E2776B"/>
+          </LinearGradientBrush>
+        </Border.Background>
+        <StackPanel Spacing="12">
+          <StackPanel Orientation="Horizontal" Spacing="12">
+            <Border Width="28" Height="28" CornerRadius="14" Background="{StaticResource BadSoft}">
+              <c:Icon Kind="alert" Width="16" Height="16" Foreground="{StaticResource Bad}"/>
+            </Border>
+            <TextBlock Text="What you can do" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center"/>
+          </StackPanel>
+          <TextBlock Text="{Binding Detail}" Foreground="{StaticResource InkSoft}" TextWrapping="Wrap" MaxWidth="680" HorizontalAlignment="Left"/>
+          <Button HorizontalAlignment="Left" Content="{Binding Fix.Label}" Command="{Binding FixCommand}" IsVisible="{Binding Fix, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+          <TextBlock Foreground="{StaticResource InkSoft}" TextWrapping="Wrap" MaxWidth="680" HorizontalAlignment="Left" IsVisible="{Binding AskConsent}"
+                     Text="Can we send a report about this to the developers? It holds your Hookshot version, your graphics card, system and the game's log, with your user name taken out. No saves, no game files. You choose once; the launcher's settings can change it."/>
+          <TextBlock Foreground="{StaticResource InkSoft}" TextWrapping="Wrap" IsVisible="{Binding ReportsOff}"
+                     Text="Problem reports are off (the launcher's settings). Copy report puts it on the clipboard for the issue form."/>
+          <TextBlock Text="{Binding Status}" FontWeight="SemiBold" IsVisible="{Binding Status, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+          <Border IsVisible="{Binding ShowPreview}" MaxHeight="180" CornerRadius="10" BorderBrush="{StaticResource GlassLine}"
+                  BorderThickness="1" Background="#33000000">
+            <ScrollViewer Padding="12,10" HorizontalScrollBarVisibility="Auto">
+              <SelectableTextBlock Text="{Binding Preview}" FontFamily="{StaticResource Mono}" FontSize="11" Foreground="{StaticResource InkSoft}"/>
+            </ScrollViewer>
+          </Border>
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </DockPanel>
+</UserControl>

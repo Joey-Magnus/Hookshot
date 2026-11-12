@@ -10,6 +10,8 @@
         <Button Classes="link soft" Content="{Binding LogButton}" Command="{Binding ToggleLogCommand}"/>
         <Ellipse Width="3" Height="3" Fill="{StaticResource InkFaint}" Margin="12,0" VerticalAlignment="Center"/>
         <Button Classes="link soft" Content="Copy for a bug report" Command="{Binding CopyCommand}"/>
+        <Ellipse Width="3" Height="3" Fill="{StaticResource InkFaint}" Margin="12,0" VerticalAlignment="Center"/>
+        <Button Classes="link soft" Content="Send report" Command="{Binding ReportCommand}"/>
       </StackPanel>
       <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
         <Button Content="Back" Command="{Binding BackCommand}"/>

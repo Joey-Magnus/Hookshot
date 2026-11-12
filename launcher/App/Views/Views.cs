@@ -29,6 +29,7 @@ public sealed partial class SettingsStepView : UserControl
 public sealed partial class BuildStepView : UserControl { public BuildStepView() => InitializeComponent(); }
 public sealed partial class ReadyView : UserControl { public ReadyView() => InitializeComponent(); }
 public sealed partial class ProblemView : UserControl { public ProblemView() => InitializeComponent(); }
+public sealed partial class ReportView : UserControl { public ReportView() => InitializeComponent(); }
 public sealed partial class SettingsView : UserControl { public SettingsView() => InitializeComponent(); }
 public sealed partial class SavesView : UserControl { public SavesView() => InitializeComponent(); }
 public sealed partial class SavesConfirmView : UserControl { public SavesConfirmView() => InitializeComponent(); }

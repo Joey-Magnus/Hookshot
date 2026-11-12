@@ -486,7 +486,17 @@ public sealed class ProblemViewModel : ViewModelBase, IWizardPage
         CopyCommand = new Command(() => _ = Copy());
         BackCommand = new Command(() => build.Job.Main.Navigate(build.Job.Settings ?? new SettingsStepViewModel(build.Job)));
         RetryCommand = new Command(() => build.Job.Main.Navigate(new BuildStepViewModel(build.Job)));
+        Problem = Problems.FromBuild(why);
+        ReportCommand = new Command(() => build.Job.Main.Navigate(new ReportViewModel(build.Job.Main, Problem,
+            () => ProblemReports.Make(Problem, build.Job.Version ?? "unknown", ProblemReports.SystemLine(), null, build.Report(Why),
+                                      Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), Environment.UserName,
+                                      OperatingSystem.IsWindows()),
+            () => build.Job.Main.Navigate(this), crashed: false)));
     }
+
+    /// What went wrong in plain words (launcher/Core/Problems.cs), from make_game.py's last message
+    public Problem Problem { get; }
+    public Command ReportCommand { get; }
 
     public int Step => 3;
     public bool Finished => false;
@@ -494,8 +504,10 @@ public sealed class ProblemViewModel : ViewModelBase, IWizardPage
     public string Stage { get; }
     public int Percent { get; }
     public bool Memory => Why.Contains("memory", StringComparison.OrdinalIgnoreCase);
-    public string Head => Memory ? "The PC ran out of memory while building" : "make_game.py stopped";
-    public string Body => $"Building {build.Job.Shown} stopped in {Stage}, {Percent}% of the way through. It said: {Why}";
+    public string Head => Problem.Kind == ProblemKind.Unknown ? "make_game.py stopped" : Problem.Headline;
+    public string Body => Problem.Kind == ProblemKind.Unknown
+        ? $"Building {build.Job.Shown} stopped in {Stage}, {Percent}% of the way through. It said: {Why}"
+        : $"{Problem.Detail} (Building {build.Job.Shown} stopped in {Stage}, {Percent}% of the way through.)";
     public bool ShowLog { get => showLog; set { if (Set(ref showLog, value)) RaiseAll(nameof(LogButton), nameof(LogTail)); } }
     public string LogButton => showLog ? "Hide details" : "Show details";
     public string LogTail => string.Join("\n", build.Log.Skip(Math.Max(0, build.Log.Count - 6)));

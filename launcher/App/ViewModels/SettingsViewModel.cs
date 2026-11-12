@@ -91,6 +91,26 @@ public sealed class SettingsViewModel : ViewModelBase
 
     public string WorkNote => workBytes is long b && b > 0 ? $"{Durations.Size(b)} kept to make updates quicker." : "Nothing kept yet.";
 
+    /// Problem reports to the developers (docs/launcher-reports.md): Always send, Ask each time, Never; "Ask the first time"
+    /// until a choice was made
+    public static readonly IReadOnlyList<string> ReportChoices = ["Always send", "Ask each time", "Never send"];
+    static readonly string[] ReportIds = [ReportConsent.Always, ReportConsent.Ask, ReportConsent.Never];
+
+    public IReadOnlyList<string> ReportOptions => ReportChoices;
+
+    public string? Reports
+    {
+        get => Array.IndexOf(ReportIds, s.ReportProblems) is var i and >= 0 ? ReportChoices[i] : null;
+        set
+        {
+            var i = value == null ? -1 : ReportChoices.ToList().IndexOf(value);
+            if (i < 0 || ReportIds[i] == s.ReportProblems) return;
+            s.ReportProblems = ReportIds[i];
+            Save();
+            Raise();
+        }
+    }
+
     public bool CheckUpdates
     {
         get => s.CheckUpdates;

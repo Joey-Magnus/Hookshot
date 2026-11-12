@@ -30,6 +30,11 @@ public sealed class LauncherSettings
     public string? BuildsFolder { get; set; }
     /// Ask GitHub for each channel's newest version when the launcher starts
     public bool CheckUpdates { get; set; } = true;
+    /// Problem reports to the developers: ReportConsent's always, ask or never; null until asked, the first time something
+    /// goes wrong
+    public string? ReportProblems { get; set; }
+    /// Each build folder's log already offered for a report (or dismissed), by its write time: a crash is offered once
+    public Dictionary<string, long> SeenCrashLogs { get; set; } = new();
 
     /// The folder builds go in when none was chosen: make_game.py's own default game folder's parent, ~/Games/Hookshot
     /// (%USERPROFILE%\Games\Hookshot on Windows)
@@ -71,6 +76,8 @@ public sealed class LauncherSettings
         if (BuildWorkers is <= 0) BuildWorkers = null;
         if (!DlssLicense) Dlss = false;   // (a tick saved before its license was accepted is not one)
         if (!FsrLicense) Fsr = false;
+        if (!ReportConsent.IsChoice(ReportProblems)) ReportProblems = null;
+        SeenCrashLogs ??= new();
         return this;
     }
 

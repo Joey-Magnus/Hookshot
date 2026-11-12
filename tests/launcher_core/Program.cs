@@ -68,6 +68,7 @@ static partial class Program
         SavesChecks.Run(Folder("saves"));
         Utf8Checks();
         await ScreenChecks();
+        await ProblemChecks();
         checks += SavesChecks.Count;
         Console.WriteLine($"launcher core: {checks} checks passed");
         return 0;

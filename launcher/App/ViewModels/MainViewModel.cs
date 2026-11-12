@@ -39,6 +39,29 @@ public sealed class MainViewModel : ViewModelBase
         MinimizeCommand = new Command(() => Host?.Minimize());
         CloseCommand = new Command(() => Host?.Close());
         SettingsCommand = new Command(ShowSettings);
+        if (start.Kind == StartKind.Window) OfferCrash();
+    }
+
+    /// A build whose last run closed unexpectedly (launcher/Core/ProblemReport.cs CrashCheck): its report page, once per log
+    void OfferCrash()
+    {
+        var s = Service.Settings;
+        foreach (var b in Service.Registry.Builds)
+        {
+            var found = CrashCheck.Find(b.Folder, s.SeenCrashLogs.GetValueOrDefault(b.Folder), Service.Gpus.FirstOrDefault());
+            if (found == null) continue;
+            s.SeenCrashLogs[b.Folder] = found.WriteTicks;
+            try { Service.SaveSettings(); }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
+            if (s.ReportProblems == ReportConsent.Never && found.Problem.Fixes.All(f => f.Link == null)) return;
+            var version = b.Version ?? "unknown";
+            page = new ReportViewModel(this, found.Problem,
+                () => ProblemReports.Make(found.Problem, version, ProblemReports.SystemLine(), found.Log, null,
+                                          Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), Environment.UserName,
+                                          OperatingSystem.IsWindows()),
+                ShowHome, crashed: true);
+            return;
+        }
     }
 
     public LauncherService Service { get; }
