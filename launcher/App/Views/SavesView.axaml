@@ -1,0 +1,60 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:HookshotLauncher.ViewModels"
+             xmlns:core="using:HookshotLauncher.Core"
+             x:Class="HookshotLauncher.Views.SavesView"
+             x:DataType="vm:SavesViewModel">
+  <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="32,22,32,22">
+    <DockPanel Grid.Row="0">
+      <Button Content="Back" DockPanel.Dock="Right" Command="{Binding BackCommand}"/>
+      <StackPanel Spacing="4">
+        <TextBlock Classes="heading" Text="Saves"/>
+        <TextBlock Classes="sub" Text="{Binding Intro}" MaxWidth="700" HorizontalAlignment="Left"/>
+      </StackPanel>
+    </DockPanel>
+
+    <Border Grid.Row="1" Classes="card" Margin="0,16,0,0" Padding="16,12">
+      <DockPanel>
+        <CheckBox DockPanel.Dock="Right" IsChecked="{Binding KeepSettings}" Content="Keep the target's game settings (option.sav)"/>
+        <StackPanel Spacing="4">
+          <StackPanel Orientation="Horizontal" Spacing="10">
+            <TextBlock Text="Build" VerticalAlignment="Center" FontWeight="SemiBold"/>
+            <ComboBox ItemsSource="{Binding Builds}" SelectedItem="{Binding Target}" MinWidth="220">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="core:BuildEntry"><TextBlock Text="{Binding Name}"/></DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+          </StackPanel>
+          <TextBlock Classes="faint" Text="{Binding TargetSummary}" TextTrimming="CharacterEllipsis"/>
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <TextBlock Grid.Row="2" Text="{Binding Message}" TextWrapping="Wrap" Foreground="{StaticResource Warn}" Margin="0,10,0,0"/>
+
+    <ScrollViewer Grid.Row="3" Margin="0,10,0,0">
+      <ItemsControl ItemsSource="{Binding Sets}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:SaveSetViewModel">
+            <Border Classes="card" Margin="0,0,0,8" Padding="16,12">
+              <DockPanel>
+                <StackPanel Orientation="Horizontal" Spacing="6" DockPanel.Dock="Right" VerticalAlignment="Center">
+                  <Button Classes="small" Content="Import" Command="{Binding ImportCommand}" IsVisible="{Binding IsEmulator}"
+                          ToolTip.Tip="This save into the build chosen above (its own save is backed up first)"/>
+                  <Button Classes="small" Content="Export" Command="{Binding ExportCommand}" IsVisible="{Binding IsEmulator}"
+                          ToolTip.Tip="The build's save into this one (backed up first)"/>
+                  <Button Classes="small" Content="Copy into the build above" Command="{Binding CopyFromCommand}" IsVisible="{Binding IsOtherBuild}"/>
+                </StackPanel>
+                <StackPanel Spacing="3">
+                  <TextBlock Text="{Binding Title}" FontWeight="SemiBold"/>
+                  <TextBlock Classes="faint" Text="{Binding Where}" TextTrimming="CharacterEllipsis"/>
+                  <TextBlock Classes="faint" Text="{Binding Summary}" TextWrapping="Wrap"/>
+                </StackPanel>
+              </DockPanel>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+  </Grid>
+</UserControl>

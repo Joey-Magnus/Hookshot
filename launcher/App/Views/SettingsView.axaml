@@ -1,0 +1,64 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:HookshotLauncher.ViewModels"
+             x:Class="HookshotLauncher.Views.SettingsView"
+             x:DataType="vm:SettingsViewModel">
+  <Grid RowDefinitions="Auto,*" Margin="32,22,32,22">
+    <DockPanel Grid.Row="0">
+      <Button Classes="primary" Content="Done" DockPanel.Dock="Right" Command="{Binding BackCommand}"/>
+      <StackPanel Spacing="4">
+        <TextBlock Classes="heading" Text="Build settings"/>
+        <TextBlock Classes="sub" Text="What the next build starts with. They are remembered between builds."/>
+      </StackPanel>
+    </DockPanel>
+    <ScrollViewer Grid.Row="1" Margin="0,18,0,0">
+      <StackPanel Spacing="10">
+        <Border Classes="card" Padding="18,14">
+          <Grid ColumnDefinitions="200,*" RowDefinitions="Auto,Auto,Auto" >
+            <TextBlock Grid.Row="0" Text="Game language" VerticalAlignment="Center"/>
+            <ComboBox Grid.Row="0" Grid.Column="1" ItemsSource="{Binding LanguageChoices}" SelectedItem="{Binding Language}" MinWidth="240">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:LanguageChoice"><TextBlock Text="{Binding Name}"/></DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <TextBlock Grid.Row="1" Text="Build memory" VerticalAlignment="Center" Margin="0,10,0,0"/>
+            <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding MemoryChoices}" SelectedItem="{Binding Memory}" MinWidth="240" Margin="0,10,0,0">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:Choice"><TextBlock Text="{Binding Label}"/></DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <TextBlock Grid.Row="2" Text="Build workers" VerticalAlignment="Center" Margin="0,10,0,0"/>
+            <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding WorkerChoices}" SelectedItem="{Binding Workers}" MinWidth="240" Margin="0,10,0,0">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="vm:Choice"><TextBlock Text="{Binding Label}"/></DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+          </Grid>
+        </Border>
+        <Border Classes="card" Padding="18,14">
+          <StackPanel Spacing="8">
+            <CheckBox IsChecked="{Binding PrepareShaders}" Content="Prepare the shaders now (otherwise the game does it at its first start)"/>
+            <CheckBox IsChecked="{Binding MoveSaves}" Content="Bring my saves to a new build or an update"/>
+            <TextBlock Classes="faint" Text="{Binding MoveSavesNote}" TextWrapping="Wrap" Margin="28,0,0,0"/>
+          </StackPanel>
+        </Border>
+        <Border Classes="card" Padding="18,14">
+          <StackPanel Spacing="8">
+            <CheckBox IsChecked="{Binding Dlss}" Content="NVIDIA DLSS"/>
+            <CheckBox IsChecked="{Binding DlssLicense}" Content="I accept NVIDIA's DLSS SDK license (the build downloads NVIDIA's SDK)" Margin="28,0,0,0"
+                      IsVisible="{Binding Dlss}"/>
+            <CheckBox IsChecked="{Binding Fsr}" Content="AMD FSR 4" IsVisible="{Binding FsrAvailable}"/>
+            <CheckBox IsChecked="{Binding FsrLicense}" Content="I accept AMD's FSR SDK license (the build downloads AMD's runtime)" Margin="28,0,0,0">
+              <CheckBox.IsVisible>
+                <MultiBinding Converter="{x:Static BoolConverters.And}">
+                  <Binding Path="Fsr"/>
+                  <Binding Path="FsrAvailable"/>
+                </MultiBinding>
+              </CheckBox.IsVisible>
+            </CheckBox>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+    </ScrollViewer>
+  </Grid>
+</UserControl>

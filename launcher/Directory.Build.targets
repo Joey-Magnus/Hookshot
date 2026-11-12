@@ -1,0 +1,4 @@
+<Project>
+  <!-- (Avalonia.BuildServices, which Avalonia brings in, reports each build to Avalonia's servers: not from this repository's builds) -->
+  <Target Name="AvaloniaStats"/>
+</Project>

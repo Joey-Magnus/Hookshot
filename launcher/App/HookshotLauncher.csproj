@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The Hookshot Launcher's window (Avalonia): Windows and Linux. Its logic is launcher/Core -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>HookshotLauncher</AssemblyName>
+    <RootNamespace>HookshotLauncher</RootNamespace>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <BuiltInComInteropSupport>false</BuiltInComInteropSupport>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia"/>
+    <PackageReference Include="Avalonia.Desktop"/>
+    <PackageReference Include="Avalonia.Themes.Fluent"/>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Core/HookshotLauncher.Core.csproj"/>
+  </ItemGroup>
+  <ItemGroup>
+    <!-- (the 2.x Builder's own Inter and logo, not a copy: one set of files in the repository) -->
+    <AvaloniaResource Include="../../builder/HookshotBuilder/Fonts/Inter-*.ttf" Link="Assets/Fonts/%(Filename)%(Extension)"/>
+    <AvaloniaResource Include="../../assets/hookshot.png" Link="Assets/hookshot.png"/>
+  </ItemGroup>
+</Project>

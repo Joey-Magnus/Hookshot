@@ -3,7 +3,8 @@
 # byte-compile of every tracked Python file, and writes a table of them to the run's summary. A check that needs a GPU,
 # the game or MSVC says so, and why, in its own file (RUN_ALL_SKIP). No game data is involved.
 # Each system runs the tests in two parts at once (run_all.py --shard, split by tests/run_all_times.json): each part is
-# one job, and every check is in exactly one of them. Windows' own build checks (MSVC, the Builder) are in its part 1.
+# one job, and every check is in exactly one of them. Windows' own build checks (MSVC, the Builder) are in its part 1, and
+# the Hookshot Launcher's compile in each system's.
 # On Linux the C and C++ compiles go through ccache (the compilers in its PATH), with the cache main's runs leave
 # (actions/cache: read by every run, written only by a push to main, so a pull request never writes what another reads).
 name: Game-free source regressions
@@ -142,11 +143,15 @@ jobs:
           if errorlevel 1 exit /b 1
           python -I -B tests/test_invalidate_vcore.py --cxx cl
           if errorlevel 1 exit /b 1
-      - name: Set up .NET for Windows Builder checks
-        if: ${{ !cancelled() && runner.os == 'Windows' }}
+      # (the Windows Builder's .NET 8, and the Hookshot Launcher's .NET 10 on both systems: tests/test_launcher_core.py builds
+      # with it in "Every test")
+      - name: Set up .NET
+        if: ${{ !cancelled() }}
         uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: |
+            8.0.x
+            10.0.x
       - name: Check Windows Builder worker delivery
         if: ${{ !cancelled() && runner.os == 'Windows' && matrix.shard == '1/2' }}
         shell: pwsh
@@ -156,6 +161,11 @@ jobs:
       - name: Compile Windows Builder
         if: ${{ !cancelled() && runner.os == 'Windows' && matrix.shard == '1/2' }}
         run: dotnet build builder/HookshotBuilder/HookshotBuilder.csproj --configuration Debug -p:NuGetAudit=false
+      # (the launcher's window with its core; warnings are errors there, and its packages come from nuget.org at the versions its
+      # packages.lock.json files record)
+      - name: Compile the Hookshot Launcher
+        if: ${{ !cancelled() && matrix.shard == '1/2' }}
+        run: dotnet build launcher/HookshotLauncher.slnx --configuration Release -p:RestoreLockedMode=true
       # (--strict: a check whose compiler, headers or package is missing here fails instead of being skipped)
       - name: Every test
         if: ${{ !cancelled() }}

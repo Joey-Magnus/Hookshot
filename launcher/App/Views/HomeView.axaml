@@ -1,0 +1,119 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:HookshotLauncher.ViewModels"
+             x:Class="HookshotLauncher.Views.HomeView"
+             x:DataType="vm:HomeViewModel">
+  <Panel>
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" Margin="32,22,32,14">
+      <!-- the top bar -->
+      <DockPanel Grid.Row="0">
+        <Image Source="avares://HookshotLauncher/Assets/hookshot.png" Width="30" Height="30" DockPanel.Dock="Left" VerticalAlignment="Center"/>
+        <StackPanel Orientation="Horizontal" Spacing="8" DockPanel.Dock="Right" VerticalAlignment="Center">
+          <Button Content="Saves" Command="{Binding SavesCommand}"/>
+          <Button Content="Settings" Command="{Binding SettingsCommand}"/>
+        </StackPanel>
+        <TextBlock Text="Hookshot" FontSize="18" FontWeight="Bold" Margin="12,0,0,0" VerticalAlignment="Center"/>
+      </DockPanel>
+
+      <!-- a message waiting to be read -->
+      <Border Grid.Row="1" Classes="card" Background="{StaticResource WarnSoft}" Margin="0,16,0,0" Padding="14,10" IsVisible="{Binding HasNotice}">
+        <DockPanel>
+          <Button Content="OK" Classes="small" DockPanel.Dock="Right" Command="{Binding DismissNoticeCommand}" Margin="12,0,0,0"/>
+          <TextBlock Text="{Binding Notice}" TextWrapping="Wrap" Foreground="{StaticResource Warn}" VerticalAlignment="Center"/>
+        </DockPanel>
+      </Border>
+
+      <!-- Build, or Play the default build -->
+      <Border Grid.Row="2" Classes="card" Margin="0,16,0,0" Padding="24,22">
+        <DockPanel>
+          <StackPanel Orientation="Horizontal" Spacing="10" DockPanel.Dock="Right" VerticalAlignment="Center">
+            <Button Classes="big" Content="{Binding DefaultUpdateText}" Command="{Binding DefaultUpdateCommand}" IsVisible="{Binding DefaultHasUpdate}"/>
+            <Button Classes="big go" Content="{Binding PrimaryText}" Command="{Binding PrimaryCommand}" MinWidth="150"
+                    HorizontalContentAlignment="Center" IsVisible="{Binding HasBuilds}"/>
+            <Button Classes="big primary" Content="{Binding PrimaryText}" Command="{Binding PrimaryCommand}" MinWidth="150"
+                    HorizontalContentAlignment="Center" IsVisible="{Binding NoBuilds}"/>
+          </StackPanel>
+          <StackPanel VerticalAlignment="Center" Spacing="6">
+            <TextBlock Classes="heading" Text="{Binding Headline}"/>
+            <TextBlock Classes="sub" Text="{Binding Subline}"/>
+          </StackPanel>
+        </DockPanel>
+      </Border>
+
+      <!-- the list's header: the channel new builds follow -->
+      <DockPanel Grid.Row="3" Margin="0,22,0,10">
+        <Button Content="New build" DockPanel.Dock="Right" Command="{Binding NewBuildCommand}" VerticalAlignment="Center"/>
+        <TextBlock Classes="label" Text="YOUR BUILDS" VerticalAlignment="Center" IsVisible="{Binding HasBuilds}"/>
+        <TextBlock Classes="label" Text="NEW BUILDS FOLLOW" VerticalAlignment="Center" Margin="0,0,10,0" IsVisible="{Binding NoBuilds}"/>
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,12,0" Spacing="8">
+          <TextBlock Classes="faint" Text="New builds:" VerticalAlignment="Center" IsVisible="{Binding HasBuilds}"/>
+          <ListBox Classes="segments" ItemsSource="{Binding Channels}" SelectedItem="{Binding Channel}">
+            <ListBox.ItemsPanel>
+              <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="vm:ChannelChoice">
+                <TextBlock Text="{Binding Label}" FontSize="12" FontWeight="SemiBold" ToolTip.Tip="{Binding Note}"/>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+        </StackPanel>
+      </DockPanel>
+
+      <!-- the builds -->
+      <ScrollViewer Grid.Row="4" IsVisible="{Binding HasBuilds}">
+        <ItemsControl ItemsSource="{Binding Builds}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:BuildItemViewModel">
+              <Border Classes="card" Margin="0,0,0,8" Padding="16,12">
+                <DockPanel>
+                  <StackPanel Orientation="Horizontal" Spacing="6" DockPanel.Dock="Right" VerticalAlignment="Center">
+                    <Button Classes="small primary" Content="{Binding UpdateText}" Command="{Binding UpdateCommand}" IsVisible="{Binding HasUpdate}"/>
+                    <Button Classes="small go" Content="Play" Command="{Binding PlayCommand}"/>
+                    <Button Classes="small" Content="Set default" Command="{Binding SetDefaultCommand}"/>
+                    <Button Classes="small" Content="Saves" Command="{Binding SavesCommand}"/>
+                    <Button Classes="small bad" Content="Delete" Command="{Binding DeleteCommand}"/>
+                  </StackPanel>
+                  <StackPanel Spacing="4">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock Text="{Binding Name}" FontWeight="SemiBold" FontSize="15" VerticalAlignment="Center"/>
+                      <Border Classes="chip go" IsVisible="{Binding IsDefault}"><TextBlock Text="Default"/></Border>
+                      <Border Classes="chip brand"><TextBlock Text="{Binding Channel}"/></Border>
+                      <Border Classes="chip" IsVisible="{Binding IsBuilt}"><TextBlock Text="{Binding BuiltText}"/></Border>
+                      <Border Classes="chip warn" IsVisible="{Binding !IsBuilt}"><TextBlock Text="{Binding BuiltText}"/></Border>
+                    </StackPanel>
+                    <TextBlock Classes="faint" Text="{Binding Version}"/>
+                    <TextBlock Classes="faint" Text="{Binding Folder}" TextTrimming="CharacterEllipsis"/>
+                  </StackPanel>
+                </DockPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+      <StackPanel Grid.Row="4" IsVisible="{Binding NoBuilds}" Spacing="8" Margin="0,8,0,0">
+        <TextBlock Classes="sub" Text="Release: the tested versions. Release candidate: the next one, to try first. Nightly: every change, as it lands."/>
+        <TextBlock Classes="faint" Text="You can keep several versions side by side, each on its own channel."/>
+      </StackPanel>
+
+      <TextBlock Grid.Row="5" Classes="faint" Text="{Binding Status}" Margin="0,8,0,0"/>
+    </Grid>
+
+    <!-- Delete: asked first -->
+    <Border Background="#99000000" IsVisible="{Binding Deleting}">
+      <Border Classes="card" Background="{StaticResource Raised}" Width="460" Padding="24" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <StackPanel Spacing="14">
+          <TextBlock Text="{Binding DeleteTitle}" FontSize="17" FontWeight="Bold" TextWrapping="Wrap"/>
+          <TextBlock Classes="sub" Text="Its game folder stays on the disk unless you tick below. Your saves on Windows are in that folder."/>
+          <CheckBox IsChecked="{Binding DeleteFiles}" IsEnabled="{Binding CanDeleteFiles}">
+            <TextBlock Text="{Binding DeleteFolderText}" TextWrapping="Wrap" FontSize="13"/>
+          </CheckBox>
+          <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button Content="Cancel" Command="{Binding CancelDeleteCommand}"/>
+            <Button Classes="primary" Content="Remove" Command="{Binding ConfirmDeleteCommand}"/>
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </Border>
+  </Panel>
+</UserControl>

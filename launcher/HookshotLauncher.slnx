@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Core/HookshotLauncher.Core.csproj" />
+  <Project Path="App/HookshotLauncher.csproj" />
+</Solution>

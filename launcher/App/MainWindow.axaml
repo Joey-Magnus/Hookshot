@@ -1,0 +1,19 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:HookshotLauncher.ViewModels"
+        xmlns:views="using:HookshotLauncher.Views"
+        x:Class="HookshotLauncher.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Title="Hookshot"
+        Icon="avares://HookshotLauncher/Assets/hookshot.png"
+        Width="960" Height="600" MinWidth="760" MinHeight="520"
+        WindowStartupLocation="CenterScreen">
+  <ContentControl Content="{Binding Page}">
+    <ContentControl.DataTemplates>
+      <DataTemplate DataType="vm:HomeViewModel"><views:HomeView/></DataTemplate>
+      <DataTemplate DataType="vm:WizardViewModel"><views:WizardView/></DataTemplate>
+      <DataTemplate DataType="vm:SettingsViewModel"><views:SettingsView/></DataTemplate>
+      <DataTemplate DataType="vm:SavesViewModel"><views:SavesView/></DataTemplate>
+    </ContentControl.DataTemplates>
+  </ContentControl>
+</Window>

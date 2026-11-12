@@ -1,0 +1,39 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:HookshotLauncher.ViewModels"
+             x:Class="HookshotLauncher.Views.WizardView"
+             x:DataType="vm:WizardViewModel">
+  <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="32,22,32,22">
+    <DockPanel Grid.Row="0">
+      <Button Content="Cancel" DockPanel.Dock="Right" Command="{Binding CancelCommand}"/>
+      <StackPanel Spacing="2">
+        <TextBlock Classes="label" Text="{Binding StepText}"/>
+        <TextBlock Classes="faint" Text="{Binding Kind}"/>
+      </StackPanel>
+    </DockPanel>
+
+    <ItemsControl Grid.Row="1" ItemsSource="{Binding Steps}" Margin="0,18,0,0">
+      <ItemsControl.ItemsPanel>
+        <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="10"/></ItemsPanelTemplate>
+      </ItemsControl.ItemsPanel>
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="vm:WizardStep">
+          <Border Classes="chip"><TextBlock><Run Text="{Binding Number}"/><Run Text="  "/><Run Text="{Binding Title}"/></TextBlock></Border>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+
+    <Border Grid.Row="2" Classes="card" Margin="0,18,0,18" Padding="28">
+      <StackPanel Spacing="10">
+        <TextBlock Classes="heading" Text="{Binding Title}"/>
+        <TextBlock Classes="sub" Text="{Binding Body}" MaxWidth="640" HorizontalAlignment="Left"/>
+        <TextBlock Classes="faint" Text="This step's design is being made: nothing is downloaded or built from here yet." Margin="0,10,0,0"/>
+      </StackPanel>
+    </Border>
+
+    <StackPanel Grid.Row="3" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+      <Button Content="Back" Command="{Binding BackCommand}"/>
+      <Button Classes="primary" Content="{Binding NextText}" Command="{Binding NextCommand}" MinWidth="96" HorizontalContentAlignment="Center"/>
+    </StackPanel>
+  </Grid>
+</UserControl>
