@@ -942,7 +942,15 @@ void apply_auto(bool keep_own) {
         opts.output_res = output;
     } else {
         env_release(&opts.output_res);
-        opts.output_res = auto_output = c.output;
+        // (the size Auto chose, among the menu's choices: the screen's resolutions and the common ones; a size the menu does not
+        // offer is the game's own, never the player's custom size)
+        int at = 0;
+        const std::vector<Out>& offered = outputs();
+        for (int i = 1; c.output_w && i < (int)offered.size(); i++)
+            if ((int)offered[i].w == c.output_w && (int)offered[i].h == c.output_h) at = i;
+        if (c.output_w && !at)
+            logf("vk: Auto (this PC): the screen's %dx%d is not among the Output resolution's choices: 2048x1152", c.output_w, c.output_h);
+        opts.output_res = auto_output = at;
     }
     if (own_budget) {
         opts.budget = 0;
