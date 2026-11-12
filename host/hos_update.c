@@ -333,10 +333,10 @@ void hos_update_check(void) {
         _snwprintf(user, MAX_PATH + 16, L"%ls\\user", dir);
         CreateDirectoryW(user, NULL);
         _snwprintf(file, MAX_PATH + 64, L"%ls\\user\\hookshot_update_skip.txt", dir);
-        /* (not through a link or a junction: the user folder or the file put there in its place would have the write
-           land somewhere else) */
+        /* (not through a link or a junction at the file's own name: the write would land somewhere else. The user folder
+           may be one, as on Linux: it is where the saves are, and a junction is how a player keeps them on another drive) */
         const DWORD ua = GetFileAttributesW(user), fa = GetFileAttributesW(file);
-        FILE *f = ua != INVALID_FILE_ATTRIBUTES && (ua & FILE_ATTRIBUTE_DIRECTORY) && !is_link(user, ua) &&
+        FILE *f = ua != INVALID_FILE_ATTRIBUTES && (ua & FILE_ATTRIBUTE_DIRECTORY) &&
                           (fa == INVALID_FILE_ATTRIBUTES || (!(fa & FILE_ATTRIBUTE_DIRECTORY) && !is_link(file, fa)))
                       ? _wfopen(file, L"wb")
                       : NULL;

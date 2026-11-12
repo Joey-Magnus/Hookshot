@@ -1,8 +1,9 @@
 """The update offer's "Skip this version" (host/hos_update.c write_skip, compiled here from its own text) writes
 <saves folder>/hookshot_update_skip.txt (hos_user_dir) only as a plain file and never through a symbolic link at its
 name: a link put in the file's place leaves what it points to as it was. A saves folder that is itself a link (kept
-elsewhere by the player) still takes the file. Windows refuses symbolic links and junctions at <game>\\user and the
-file (checked by its text here).
+elsewhere by the player) still takes the file. Windows likewise refuses a symbolic link or junction at the file's own
+name only: <game>\\user may be a junction, which is how a player keeps the saves on another drive (checked by its
+text here).
 
 python -I -B tests/test_update_skip_file.py [--cc gcc]
 """
@@ -53,11 +54,14 @@ def main():
         print("SKIP: symbolic links: checked on Linux")
         return 0
     source = (ROOT / "host/hos_update.c").read_text(encoding="utf-8")
-    # (Windows: the user folder and the file are looked at for reparse points before the write)
+    # (Windows: the file's own name is looked at for a reparse point before the write; the user folder only has to be a
+    # folder, a junction included, as Linux's write_skip takes a linked saves folder)
     win = source[source.index("#ifdef _WIN32\n#include \"hos_paths.h\""):source.index("#elif defined(__linux__)")]
     skip = win[win.index("if (answer == IDCANCEL) {"):]
     skip = skip[:skip.index("return;")]
-    assert "is_link(user, ua)" in skip and "is_link(file, fa)" in skip and skip.index("is_link(user") < skip.index("_wfopen(file"), skip
+    assert "is_link(file, fa)" in skip and skip.index("is_link(file, fa)") < skip.index("_wfopen(file"), skip
+    assert "is_link(user" not in skip, "a junctioned <game>\\user (saves on another drive) would never take the skip file"
+    assert "(ua & FILE_ATTRIBUTE_DIRECTORY)" in skip and skip.index("(ua & FILE_ATTRIBUTE_DIRECTORY)") < skip.index("_wfopen(file"), skip
     is_link = block(win, "static int is_link(")
     assert "IO_REPARSE_TAG_SYMLINK" in is_link and "IO_REPARSE_TAG_MOUNT_POINT" in is_link, is_link
     with tempfile.TemporaryDirectory(prefix="hookshot-skip-") as tmp:
