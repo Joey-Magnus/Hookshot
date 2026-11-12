@@ -90,6 +90,11 @@ drive. Shortcuts start unticked in this mode. Details are in the
 The game is added to your applications menu as **Hookshot**. That entry, and `hookshot` in the game folder, open the
 launcher. **Keep the AppImage where it is**: the launcher uses it to update.
 
+When the desktop gives the launcher its own systemd service, **Play** waits up to two seconds for the game's own
+scope before closing the window. If that hand-off fails, it cancels the attempt and starts the game directly, and
+notes the fallback in `hookshot_startup.log` after the game exits. A direct start still lives as long as the
+desktop's original service, so a desktop that stops a launcher's children when it closes stops the game too.
+
 On AMD cards, the game is faster with access to `/dev/udmabuf`. If the log warns about it, see
 [troubleshooting](troubleshooting.md#linux-udmabuf-warning). NVIDIA users can ignore that warning.
 

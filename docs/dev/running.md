@@ -125,6 +125,15 @@ Scripted presses are applied before the window-focus check, so they reach the ga
 another. A log line saying the game window is not in front does not mean they were dropped. The game still has to be
 in a state that reads the controller. The keyboard and mouse always stay with the window in front.
 
+When an SDL controller connects, its `hid: controller` log line includes the hardware `guid` and the active
+`mapping-name` (names are limited to 128 bytes). The `mapping-string` follows in GUID-labelled parts of at most 512
+bytes, up to 1024 bytes in total, with a note when truncated. The GUID and mapping describe a device model's button
+layout; no serial, path, user or account call is made. A mapping the player supplied, by environment or file, is
+logged as written, within those limits. `mapping=available` means SDL returned a mapping, not that its origin is
+known; `mapping=none` means SDL returned none, and `unavailable` means the loaded SDL lacks a required diagnostic
+call. A zero GUID is `unknown`. These queries don't change bindings, load a mapping file, or change which controllers
+are read.
+
 For anything more than timed presses, use the [control bridge](automation.md): `HOS_CONTROL=<socket path>` and
 `scripts/hookshot_ctl.py`.
 
