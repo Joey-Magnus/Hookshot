@@ -264,6 +264,16 @@ static int is_link(const wchar_t *path, DWORD attributes) {
            fd.dwReserved0 == 0xA000001DUL /* IO_REPARSE_TAG_LX_SYMLINK */;
 }
 
+/* Portable metadata permits one constant launcher in the owning game folder, never a cwd/PATH lookup. */
+static int local_builder(const wchar_t *file, const wchar_t *dir, wchar_t *out, size_t cap) {
+    char local[8];
+    if (!read_value(file, "builder_local", local, sizeof local) || strcmp(local, "1")) return 0;
+    const int n = _snwprintf(out, cap, L"%ls\\hookshot.exe", dir);
+    if (n < 0 || (size_t)n >= cap) return 0;
+    const DWORD attributes = GetFileAttributesW(out);
+    return attributes != INVALID_FILE_ATTRIBUTES && !(attributes & FILE_ATTRIBUTE_DIRECTORY);
+}
+
 void hos_update_check(void) {
     if (getenv("HOOKSHOT_NO_UPDATE_CHECK") && strcmp(getenv("HOOKSHOT_NO_UPDATE_CHECK"), "0")) return;
     wchar_t dir[MAX_PATH], file[MAX_PATH + 64];
@@ -284,6 +294,8 @@ void hos_update_check(void) {
     fprintf(stderr, "update: this folder is %s, the latest release is %s\n", have, tag);
     if (!strcmp(tag, have) || !strcmp(tag, skipped)) return;
     if (strchr(have, '-') && !nightly_version(have) && !newer_version(tag, have)) return;   /* (a release candidate: newer only) */
+    if (!nightly_version(have) && newer_version(have, tag)) return;   /* (a release or release candidate newer than the latest:
+        a test build of the next release, before it is out. "Update" would build the older one over it, 2026-11-11) */
 
     wchar_t wtag[128], whave[128], wbuilder[MAX_PATH], text[2048];
     MultiByteToWideChar(CP_UTF8, 0, tag, -1, wtag, 128);
@@ -292,9 +304,12 @@ void hos_update_check(void) {
     /* (the Python builder: builder= is its pythonw.exe, and builder_args= what goes before --update, its start script) */
     char bargs[1024] = "";
     wchar_t wbargs[1024] = L"";
-    read_value(file, "builder_args", bargs, sizeof bargs);
+    char local_mode[8];
+    const int portable = read_value(file, "builder_local", local_mode, sizeof local_mode) && !strcmp(local_mode, "1");
+    if (!portable) read_value(file, "builder_args", bargs, sizeof bargs);
     DWORD battr = INVALID_FILE_ATTRIBUTES;
-    const int has_builder = read_value(file, "builder", builder, sizeof builder) && builder_ok(builder, bargs, 1) &&
+    const int has_builder = portable ? local_builder(file, dir, wbuilder, MAX_PATH) :
+                            read_value(file, "builder", builder, sizeof builder) && builder_ok(builder, bargs, 1) &&
                             MultiByteToWideChar(CP_UTF8, 0, builder, -1, wbuilder, MAX_PATH) > 0 &&
                             (!bargs[0] || MultiByteToWideChar(CP_UTF8, 0, bargs, -1, wbargs, 1024) > 0) &&
                             (battr = GetFileAttributesW(wbuilder)) != INVALID_FILE_ATTRIBUTES &&
@@ -504,6 +519,8 @@ void hos_update_check(void) {
     fprintf(stderr, "update: this folder is %s, the latest release is %s\n", have, tag);
     if (!strcmp(tag, have) || !strcmp(tag, skipped)) return;
     if (strchr(have, '-') && !nightly_version(have) && !newer_version(tag, have)) return;   /* (a release candidate: newer only) */
+    if (!nightly_version(have) && newer_version(have, tag)) return;   /* (a release or release candidate newer than the latest:
+        a test build of the next release, before it is out. "Update" would build the older one over it, 2026-11-11) */
     snprintf(path, sizeof path, "%shookshot_version.txt", dir);
     struct stat bst;
     const int has_builder = installed_builder(builder, sizeof builder) ||

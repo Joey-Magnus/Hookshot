@@ -19,6 +19,8 @@
 #include "vk_draw.h"
 #include "vk_framegen.h"
 #include "vk_internal.h"
+#include "presenter_queue.h"
+static_assert(mkwvk::kQueueGraphics == VK_QUEUE_GRAPHICS_BIT && mkwvk::kQueueCompute == VK_QUEUE_COMPUTE_BIT);
 #include "gpu_choice.h"
 #include "vk_menu.h"
 #include "vk_dlss.h"
@@ -77,6 +79,22 @@ const MkwVkHost* host;
 int64_t prof_ns[PROF_COUNT];
 Device dev;
 PFN_vkGetInstanceProcAddr instance_proc() { return vkx::instance_proc_addr(); }
+/// (hookshot) The driver as it names itself (VkPhysicalDeviceDriverProperties: "NVIDIA 580.95.05", "radv Mesa 25.2.4"), else its
+/// version number: the log's "vk: driver:" line and the menu's Save my pipeline list (vk_menu.cpp)
+std::string driver_text() {
+    VkPhysicalDeviceDriverProperties drv{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES};
+    VkPhysicalDeviceProperties2 p2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+    p2.pNext = &drv;
+    if (dev.physical) vkGetPhysicalDeviceProperties2(dev.physical, &p2);
+    std::string name(drv.driverName, strnlen(drv.driverName, sizeof drv.driverName)),
+        info(drv.driverInfo, strnlen(drv.driverInfo, sizeof drv.driverInfo));
+    if (name.empty() && info.empty()) {
+        char b[32];
+        snprintf(b, sizeof b, "%#x", dev.props.driverVersion);
+        return b;
+    }
+    return info.empty() ? name : name.empty() ? info : name + " " + info;
+}
 
 /// (hookshot) Milliseconds on the steady clock: the log's last line and the preparation's watchdog
 int64_t steady_ms() {
@@ -224,6 +242,16 @@ bool pick_device() {
     return true;
 }
 
+/// (hookshot) Whether the shaders' float adds to storage buffers are asked to be the GPU's own atomic (create_device):
+/// RX_VK_NATIVE_FADD by the switches' rule (hookshot_env.h env_value_off: 0, false, off, no or empty is off, any other
+/// value on); unset, only with NVIDIA's driver, the one the native add was tried on in the game (an RTX 4090 in Kakariko
+/// and on Death Mountain Trail). AMD's RDNA 3 and later and Intel's Arc report the feature too but were not tried: they
+/// keep the loop unless the switch asks, until runs on them say otherwise
+static bool native_fadd_wanted(const char* env, VkDriverId driver) {
+    if (env) return !env_value_off(env);
+    return driver == VK_DRIVER_ID_NVIDIA_PROPRIETARY;
+}
+
 bool create_device() {
     uint32_t n = 0;
     vkEnumerateDeviceExtensionProperties(dev.physical, nullptr, &n, nullptr);
@@ -257,7 +285,17 @@ bool create_device() {
         if (const char* e = getenv("RX_VK_FORCE_MESH_FALLBACK")) v = atoi(e) != 0 ? 2 : v;
         return v >= 0 && v <= 2 ? v : 0;
     }();
-    if (mesh_mode == 2) dev.mesh_shader = false;
+    // (hookshot, issue 2245) RADV's native task/mesh path deadlocks the GPU: the gfx ring and RADV's gang compute ring
+    // end up waiting on each other, and a mesh-only draw hangs with the compute queue empty (devcoredumps on an
+    // RX 6800: no VM fault; waves stuck on gfx in the second). Task + mesh draws alone on the fallback still crash, so
+    // only full Compute is stable there, and the reports span Navi 2x (RX 6800, RX 6600 XT) and the RDNA3 APUs (Steam
+    // Deck OLED, Rog Xbox Ally X). On Linux, where AMD's Vulkan driver is RADV, Automatic picks Compute; Native stays
+    // a choice in the row. RDNA1 and older have no mesh shaders on RADV: for them a no-op.
+    int mesh_mode_used = mesh_mode;
+#ifndef _WIN32
+    if (mesh_mode_used == 0 && dev.props.vendorID == 0x1002) mesh_mode_used = 2;   // (Linux AMD is RADV)
+#endif
+    if (mesh_mode_used == 2) dev.mesh_shader = false;
     else optional(VK_EXT_MESH_SHADER_EXTENSION_NAME, dev.mesh_shader);
     optional(VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME, dev.external_memory_host);
     optional(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME, dev.external_memory_fd);   // (guest memory as udmabufs: vk_memory.cpp import_dma_buf)
@@ -287,6 +325,20 @@ bool create_device() {
         optional(VK_AMD_BUFFER_MARKER_EXTENSION_NAME, dev.buffer_marker);
     optional(VK_EXT_DEVICE_FAULT_EXTENSION_NAME, dev.device_fault);
     optional(VK_KHR_COOPERATIVE_MATRIX_EXTENSION_NAME, dev.coop_matrix);
+    // (hookshot) the GPU's own float add on storage buffers: the game's RED/ATOM.ADD.F32 become one OpAtomicFAddEXT instead
+    // of a compare-exchange loop, which gives up after CAS_LOOP_MAX_TRIES attempts and loses that add (eden
+    // spirv_emit_context.cpp DefineStorageBuffers). By default with NVIDIA's driver only (native_fadd_wanted);
+    // RX_VK_NATIVE_FADD=1 asks for it on any GPU, =0 keeps the loop on every one, the extension not even enabled
+    const char* const fadd_env = getenv("RX_VK_NATIVE_FADD");
+    VkPhysicalDeviceDriverProperties fadd_driver{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES};
+    {
+        VkPhysicalDeviceProperties2 p2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+        p2.pNext = &fadd_driver;
+        vkGetPhysicalDeviceProperties2(dev.physical, &p2);
+    }
+    const bool fadd_wanted = native_fadd_wanted(fadd_env, fadd_driver.driverID);
+    bool atomic_float = false;
+    if (fadd_wanted) optional(VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME, atomic_float);
     optional(VK_KHR_SWAPCHAIN_MUTABLE_FORMAT_EXTENSION_NAME, dev.swap_mutable);   // (hookshot: the overlays, vk_imgui.cpp)
     dlss_device_extensions(want, exts);   // (hookshot: NVIDIA DLSS's, vk_dlss.cpp)
     dlss_fg_device_extensions(want, exts);   // (hookshot: NVIDIA DLSS Frame Generation's through NGX, asked of NGX)
@@ -335,10 +387,40 @@ bool create_device() {
             if ((families[i].queueFlags & VK_QUEUE_COMPUTE_BIT) && !(families[i].queueFlags & VK_QUEUE_GRAPHICS_BIT))
                 compute_family = i;
     }
-    VkDeviceQueueCreateInfo qs[2] = {q, {VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO}};
-    qs[1].queueFamilyIndex = compute_family;
-    qs[1].queueCount = 1;
-    qs[1].pQueuePriorities = &priority;
+    // (hookshot) The presenter thread's own queue (vk_replay.cpp; RX_VK_PRESENT_THREAD=0: none): a second queue of the replay's
+    // family (NVIDIA's has 16), else a queue of a compute-only family (RADV: one graphics queue), its family's next free one. A
+    // device without either presents on the game's thread, as before
+    const char* pt_env = getenv("RX_VK_PRESENT_THREAD");
+    const bool presenter_wanted = pt_env && atoi(pt_env) != 0;   // (off by default: no queue made for it)
+    uint32_t presenter_family = UINT32_MAX, presenter_index = 0;
+    if (presenter_wanted) {   // (presenter_queue.h: never a queue another part of the renderer takes)
+        std::vector<QueueFamilyInfo> qf(n);
+        for (uint32_t i = 0; i < n; i++) qf[i] = {(uint32_t)families[i].queueFlags, families[i].queueCount};
+        if (!presenter_queue_pick(qf.data(), n, dev.queue_family, compute_family, presenter_family, presenter_index))
+            presenter_family = UINT32_MAX;
+    }
+    static const float priorities[2] = {1.0f, 1.0f};
+    std::vector<VkDeviceQueueCreateInfo> qs;
+    auto queues = [&](uint32_t family, uint32_t count) {
+        for (auto& x : qs)
+            if (x.queueFamilyIndex == family) { x.queueCount = std::max(x.queueCount, count); return; }
+        VkDeviceQueueCreateInfo x{VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
+        x.queueFamilyIndex = family, x.queueCount = count, x.pQueuePriorities = priorities;
+        qs.push_back(x);
+    };
+    queues(dev.queue_family, 1);
+    if (compute_family != UINT32_MAX) queues(compute_family, 1);
+    if (presenter_family != UINT32_MAX) queues(presenter_family, presenter_index + 1);
+    (void)q;
+    // (and the presenter's waits for its presents to be shown: VK_KHR_present_id + VK_KHR_present_wait, where the driver has them)
+    const bool want_present_wait = presenter_family != UINT32_MAX && has_extension(exts, VK_KHR_PRESENT_ID_EXTENSION_NAME) &&
+                                   has_extension(exts, VK_KHR_PRESENT_WAIT_EXTENSION_NAME);
+    if (want_present_wait)
+        for (const char* name : {VK_KHR_PRESENT_ID_EXTENSION_NAME, VK_KHR_PRESENT_WAIT_EXTENSION_NAME}) {
+            bool listed = false;
+            for (const char* w : want) listed |= !strcmp(w, name);
+            if (!listed) want.push_back(name);
+        }
 
     // features: what the hardware has of what the replay uses (all of them on the GPUs MKW-class hardware maps to)
     VkPhysicalDeviceMeshShaderFeaturesEXT mesh{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT};
@@ -373,9 +455,17 @@ bool create_device() {
     if (dev.view_2d_of_3d) *tail = &v2d3d, tail = &v2d3d.pNext;
     VkPhysicalDeviceCooperativeMatrixFeaturesKHR coop{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COOPERATIVE_MATRIX_FEATURES_KHR};
     if (dev.coop_matrix) *tail = &coop, tail = &coop.pNext;
+    VkPhysicalDeviceShaderAtomicFloatFeaturesEXT afloat{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT};
+    if (atomic_float) *tail = &afloat, tail = &afloat.pNext;
     VkPhysicalDeviceDescriptorBufferFeaturesEXT descriptor_buffer{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT};
     if (fsr_descriptor_buffer) *tail = &descriptor_buffer, tail = &descriptor_buffer.pNext;
     reflex_device_features(tail);   // (present ids, when NVIDIA Reflex's extensions are there)
+    VkPhysicalDevicePresentIdFeaturesKHR present_id{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_ID_FEATURES_KHR};
+    VkPhysicalDevicePresentWaitFeaturesKHR present_wait{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRESENT_WAIT_FEATURES_KHR};
+    if (want_present_wait) {
+        if (!reflex_present_id_features()) *tail = &present_id, tail = &present_id.pNext;   // (one of each struct in the chain)
+        *tail = &present_wait, tail = &present_wait.pNext;
+    }
     antilag_device_features(tail);   // (AMD Anti-Lag 2's, when its extension is there)
     vkGetPhysicalDeviceFeatures2(dev.physical, &f);
     descriptor_buffer.descriptorBufferCaptureReplay = VK_FALSE;
@@ -383,6 +473,20 @@ bool create_device() {
     coop.cooperativeMatrixRobustBufferAccess = VK_FALSE;
     dev.coop_matrix = dev.coop_matrix && coop.cooperativeMatrix &&
                       f12.vulkanMemoryModel && f12.vulkanMemoryModelDeviceScope;
+    {   // (only the float add on buffers on: the one the translator emits)
+        dev.float_atomic_add = atomic_float && afloat.shaderBufferFloat32AtomicAdd;
+        void* const next = afloat.pNext;
+        afloat = VkPhysicalDeviceShaderAtomicFloatFeaturesEXT{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT};
+        afloat.pNext = next;
+        afloat.shaderBufferFloat32AtomicAdd = dev.float_atomic_add ? VK_TRUE : VK_FALSE;
+        const char* const how = dev.float_atomic_add ? "native (VK_EXT_shader_atomic_float)"
+                                : !fadd_wanted       ? "compare-exchange loop"
+                                : atomic_float       ? "compare-exchange loop (no shaderBufferFloat32AtomicAdd)"
+                                                     : "compare-exchange loop (no VK_EXT_shader_atomic_float)";
+        if (fadd_env) logf("vk: float atomic add on storage buffers: %s, RX_VK_NATIVE_FADD=%s", how, fadd_env);
+        else logf("vk: float atomic add on storage buffers: %s, %s", how,
+                  fadd_wanted ? "NVIDIA's driver" : "by default only with NVIDIA's driver (RX_VK_NATIVE_FADD=1: native where the GPU has it)");
+    }
     // (bounds-checked buffer access: an out-of-range access dropped instead of faulting the device. On by default: the GPU
     // culling pass 53caac5f faulted the device while a save loaded, about one start in three, and the scene's lighting read garbage
     // for single frames (the black flashes); with it, neither in A/B runs at the same GPU time. Lichii's OoT branch keeps it on too.
@@ -427,6 +531,21 @@ bool create_device() {
     dev.eds3_clamp = dev.dynamic_state3 && eds3.extendedDynamicState3DepthClampEnable;
     dev.eds3_blend = dev.dynamic_state3 && eds3.extendedDynamicState3ColorBlendEnable &&
                      eds3.extendedDynamicState3ColorBlendEquation && eds3.extendedDynamicState3ColorWriteMask;
+    {   // (hookshot) the vendor and driver workarounds this device needs: vk_vendor.h, each forced by its RX_VK_ switch
+        VkPhysicalDeviceDriverProperties drv{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES};
+        VkPhysicalDeviceProperties2 p2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+        p2.pNext = &drv;
+        vkGetPhysicalDeviceProperties2(dev.physical, &p2);
+        VendorFacts facts;
+        facts.vendor_id = p2.properties.vendorID;
+        facts.driver_id = drv.driverID;
+        facts.device_type = p2.properties.deviceType;
+        facts.driver_info = drv.driverInfo;
+        dev.fixes = vendor_fixes(facts);
+        vendor_fixes_env(dev.fixes, [](const char* name) -> const char* { return getenv(name); });
+        logf("vk: vendor fixes for %s (%s): out-of-bounds texel fetches 0 %d, NaN tests by bits %d, gather offset %d",
+             drv.driverName, drv.driverInfo, (int)dev.fixes.fetch_bounds, (int)dev.fixes.nan_bits, (int)dev.fixes.gather_offset);
+    }
     dev.eds3_a2c = dev.dynamic_state3 && eds3.extendedDynamicState3AlphaToCoverageEnable;
     dev.vk12 = f12;
     dev.vk13 = f13;
@@ -446,8 +565,11 @@ bool create_device() {
         dev.subgroup_size = sg.subgroupSize;
         dev.subgroup_max = sc.maxSubgroupSize > sg.subgroupSize ? sc.maxSubgroupSize : sg.subgroupSize;
         dev.driver_id = drv.driverID;
-        logf("vk: subgroups: default %u lanes, %u-%u, pinned to 32 on stages %#x", sg.subgroupSize, sc.minSubgroupSize, sc.maxSubgroupSize,
-             (unsigned)dev.sg32_stages);
+        // (RADV on GCN 1-4, GFX6-8: no 16-bit shader inputs and outputs there, which RADV has from GFX9 (packed 16-bit math) on.
+        // Its compiler cannot build the biggest mesh fallback programs: fallback_size_policy.h)
+        dev.radv_gcn = drv.driverID == VK_DRIVER_ID_MESA_RADV && !f11.storageInputOutput16;
+        logf("vk: subgroups: default %u lanes, %u-%u, pinned to 32 on stages %#x; RADV on GCN 1-4: %s", sg.subgroupSize, sc.minSubgroupSize,
+             sc.maxSubgroupSize, (unsigned)dev.sg32_stages, dev.radv_gcn ? "yes" : "no");
     }
     if (!f13.dynamicRendering || !f13.synchronization2 || !f12.timelineSemaphore) {
         logf("vk: the GPU lacks dynamic rendering, synchronization2 or timeline semaphores");
@@ -466,8 +588,11 @@ bool create_device() {
 #ifdef _WIN32
     // Navi 22 can time out on task + mesh draws in the AMD Windows driver (issue 996), and so can Navi 21: on an RX 6800 XT
     // (driver 0x800161) the native path lost the device within minutes at Hyrule Castle's entrance, while the fallback played
-    // 25 minutes there with none. Navi 21 is 0x73bf (RX 6800, 6800 XT, 6900 XT); Navi 22 is 0x73df (RX 6700 XT)
-    task_mesh_fallback = dev.props.vendorID == 0x1002 && (dev.props.deviceID == 0x73bf || dev.props.deviceID == 0x73df);
+    // 25 minutes there with none. Navi 21 is 0x73bf (RX 6800, 6800 XT, 6900 XT), 0x73af (RX 6900 XT, XTXH boards) and 0x73a5
+    // (RX 6950 XT): the same chip on the same driver, not tested on their own. Navi 22 is 0x73df (RX 6700 XT)
+    task_mesh_fallback = dev.props.vendorID == 0x1002 &&
+                         (dev.props.deviceID == 0x73bf || dev.props.deviceID == 0x73af || dev.props.deviceID == 0x73a5 ||
+                          dev.props.deviceID == 0x73df);
 #endif
     if (mesh_mode == 1) task_mesh_fallback = false;   // (Native: the card's own mesh shaders for every draw)
     if (const char* e = getenv("RX_VK_TASK_MESH_FALLBACK")) task_mesh_fallback = atoi(e) != 0;
@@ -484,8 +609,8 @@ bool create_device() {
     dev.sparse_buffers = (families[dev.queue_family].queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) && f.features.sparseBinding;
     VkDeviceCreateInfo ci{VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
     ci.pNext = &f;
-    ci.queueCreateInfoCount = compute_family != UINT32_MAX ? 2 : 1;
-    ci.pQueueCreateInfos = qs;
+    ci.queueCreateInfoCount = (uint32_t)qs.size();
+    ci.pQueueCreateInfos = qs.data();
     ci.enabledExtensionCount = (uint32_t)want.size();
     ci.ppEnabledExtensionNames = want.data();
     if (vkCreateDevice(dev.physical, &ci, nullptr, &dev.device) != VK_SUCCESS) {
@@ -499,6 +624,17 @@ bool create_device() {
     dev.present_queue = VK_NULL_HANDLE;
     dev.present_family = dev.queue_family;
     if (compute_family != UINT32_MAX) vkGetDeviceQueue(dev.device, compute_family, 0, &dev.present_queue), dev.present_family = compute_family;
+    dev.presenter_queue = VK_NULL_HANDLE;
+    if (presenter_family != UINT32_MAX) {
+        vkGetDeviceQueue(dev.device, presenter_family, presenter_index, &dev.presenter_queue), dev.presenter_family = presenter_family;
+        const VkPhysicalDevicePresentIdFeaturesKHR* pid = reflex_present_id_features();
+        dev.present_wait = want_present_wait && (pid ? pid->presentId : present_id.presentId) && present_wait.presentWait;
+        logf("vk: the presenter thread's queue: family %u, queue %u%s; waits for its presents to be shown: %s", presenter_family,
+             presenter_index, presenter_family == dev.queue_family ? " (the replay's family)" : " (a compute family)",
+             dev.present_wait ? "yes (VK_KHR_present_wait)" : "no");
+    } else if (presenter_wanted) {
+        logf("vk: no second queue for the presenter thread: presents on the game's thread");
+    }
     if (dev.buffer_marker) buffer_markers_init();
     coopmat_init();
     reflex_device_created();
@@ -515,6 +651,17 @@ bool create_device() {
 
 } // namespace
 
+std::string device_report_text() {
+    if (!dev.physical) return "";
+    VkPhysicalDeviceDriverProperties drv{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES};
+    VkPhysicalDeviceProperties2 p2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+    p2.pNext = &drv;
+    vkGetPhysicalDeviceProperties2(dev.physical, &p2);
+    // (driverName and driverInfo: "NVIDIA" "580.95.05", "radv" "Mesa 25.2.4", "Intel Corporation" "101.6130")
+    std::string text = std::string(p2.properties.deviceName) + ", " + drv.driverName;
+    if (drv.driverInfo[0]) text += std::string(" ") + drv.driverInfo;
+    return text;
+}
 /// (hookshot) The UNORM format of an sRGB one (the same bytes, read and written as they are), else the format itself
 VkFormat unorm_of(VkFormat f) {
     switch (f) {
@@ -553,10 +700,13 @@ void swap_views_make(VkImageUsageFlags usage, VkFormat format) {
 int swapchain_framegen() { return opts.framegen >= 2 ? std::min(opts.framegen, 4) : 0; }
 
 /// (hookshot) Whether the swapchain is made for NVIDIA DLSS Frame Generation: a fixed multiplier, and DLSS-G making the sets
-/// (vk_dlss.cpp dlss_fg_runs: asked for, on a device it runs on). V-Sync Auto is FIFO for it, where it was measured; the
-/// renderer's own methods and other GPUs keep Auto's mailbox (or immediate). present_image makes the swapchain again when it
-/// changes
-bool swapchain_dlssg() { return swapchain_framegen() >= 2 && dlss_fg_runs(); }
+/// (vk_dlss.cpp dlss_fg_runs: asked for, on a device it runs on, its runtime making as many frames as the multiplier asks).
+/// V-Sync Auto is FIFO for it, where it was measured; the renderer's own methods and other GPUs keep Auto's mailbox (or
+/// immediate), and so does DLSS-G asked for more frames than its runtime makes, which the renderer's own then makes.
+/// present_image makes the swapchain again when it changes: NGX's answer comes at the first present with a multiplier, so a
+/// swapchain made for DLSS-G before it is made once more without. (The set's made frames are the row's multiplier less 1, up
+/// to 8x: swapchain_framegen stops at 4, for the images)
+bool swapchain_dlssg() { return swapchain_framegen() >= 2 && dlss_fg_runs(opts.framegen - 1); }
 
 void retire_swapchain() {
     if (!dev.swapchain) return;
@@ -589,6 +739,7 @@ void window_size(uint32_t* width, uint32_t* height);
 }
 
 bool create_swapchain(uint32_t width, uint32_t height) {
+    present_thread_drain();   // (no present of the old swapchain still being made on the presenter thread)
     if (!dev.surface) {
         window_size(&width, &height);
         if (!width || !height) return false;
@@ -672,9 +823,13 @@ bool create_swapchain(uint32_t width, uint32_t height) {
     // (hookshot) V-Sync Auto with DLSS Frame Generation at 2x and up: FIFO. Mailbox, NVIDIA's Fast Sync, puts the made frames on
     // the refresh grid whenever they come slower than the display (DLSS Frame Gen 3x: ~135 shown on a 165 Hz screen), so evenly
     // timed presents still reached the screen unevenly; FIFO on a VRR display shows each one when it is presented. Only where
-    // that was measured (swapchain_dlssg): the renderer's own frame generation and other GPUs keep Auto as it was
+    // that was measured (swapchain_dlssg): the renderer's own frame generation and other GPUs keep Auto as it was, also when
+    // DLSS-G is asked for but the renderer's own makes the frames (a multiplier over what its runtime makes, or given up)
     const bool fg_fifo = vsync == 0 && swapchain_dlssg();
     if (fg_fifo) logf("vk: V-Sync Auto with DLSS Frame Generation at %dx: FIFO", swapchain_framegen());
+    else if (vsync == 0 && swapchain_framegen() >= 2 && dlss_fg_wanted() && dlss_why() == DLSS_OK)
+        logf("vk: V-Sync Auto with frame generation at %dx, its frames the renderer's own (DLSS-G does not make them): Auto's "
+             "mode, as without DLSS-G", opts.framegen);
     if (vsync != 1) {
         if (!fg_fifo)
             for (auto m : modes)
@@ -720,10 +875,19 @@ bool create_swapchain(uint32_t width, uint32_t height) {
             if (caps.supportedCompositeAlpha & alpha) { ci.compositeAlpha = alpha; break; }
     }
     ci.presentMode = mode;
-    const uint32_t sharing[2] = {dev.queue_family, dev.present_family};
-    if (dev.present_queue_supported && dev.present_family != dev.queue_family) {   // (presented from another family: no ownership moves)
+    dev.swap_mode = mode;
+    uint32_t sharing[3] = {dev.queue_family};
+    uint32_t sharing_n = 1;
+    auto share = [&](uint32_t family) {
+        for (uint32_t i = 0; i < sharing_n; i++)
+            if (sharing[i] == family) return;
+        sharing[sharing_n++] = family;
+    };
+    if (dev.present_queue_supported) share(dev.present_family);
+    if (dev.presenter_supported) share(dev.presenter_family);   // (the presenter thread's queue)
+    if (sharing_n > 1) {   // (presented from another family: no ownership moves)
         ci.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-        ci.queueFamilyIndexCount = 2;
+        ci.queueFamilyIndexCount = sharing_n;
         ci.pQueueFamilyIndices = sharing;
     }
     ci.clipped = VK_TRUE;
@@ -1192,6 +1356,12 @@ bool started_up() {
 }
 // (the window's surface made: the presents' own queue kept where its family can present to it, create_device)
 static void choose_present_queue() {
+    dev.presenter_supported = false;
+    if (dev.presenter_queue) {
+        VkBool32 ok = VK_FALSE;
+        dev.presenter_supported = vkGetPhysicalDeviceSurfaceSupportKHR(dev.physical, dev.presenter_family, dev.surface, &ok) == VK_SUCCESS && ok;
+        if (!dev.presenter_supported) logf("vk: the presenter thread's queue family %u cannot present to the window: presents on the game's thread", dev.presenter_family);
+    }
     dev.present_queue_supported = false;
     if (!dev.present_queue) return;
     VkBool32 ok = VK_FALSE;
@@ -1319,17 +1489,33 @@ __attribute__((visibility("default")))
 #endif
 const MkwVkRenderer* mkwvk_init(const MkwVkHost* h) {
     using namespace mkwvk;
-    if (!h || h->version != MKWVK_API_VERSION) return nullptr;
-    host = h;
-    if (!load_global()) {
-        logf("vk: vulkan-1.dll not found");
+    if (!h) return nullptr;
+    if (h->version != MKWVK_API_VERSION) {
+        std::fprintf(stderr, "vk: host version mismatch: host has %u, expected %u\n", h->version, MKWVK_API_VERSION);
         return nullptr;
     }
-    if (!create_instance() || !pick_device() || !create_device()) return nullptr;
+    host = h;
+    if (!load_global()) {
+        logf("vk: load_global failed (Vulkan loader library or vkCreateInstance missing)");
+        return nullptr;
+    }
+    if (!create_instance()) {
+        logf("vk: create_instance failed");
+        return nullptr;
+    }
+    if (!pick_device()) {
+        logf("vk: pick_device failed");
+        return nullptr;
+    }
+    if (!create_device()) {
+        logf("vk: create_device failed");
+        return nullptr;
+    }
     logf("vk: %s, Vulkan %u.%u, driver %#x; mesh shaders %s, host memory import %s, pipeline libraries %s",
          dev.props.deviceName, VK_VERSION_MAJOR(dev.props.apiVersion), VK_VERSION_MINOR(dev.props.apiVersion),
          dev.props.driverVersion, dev.mesh_shader ? "yes" : "no", dev.external_memory_host ? "yes" : "no",
          dev.graphics_pipeline_library ? "yes" : "no");
+    logf("vk: driver: %s", driver_text().c_str());   // (the builders' Save my pipeline list reads it: nx2/pipeline_share.py)
     if (!dev.mesh_shader && !dev.mesh_fallback && !env_on("RX_VK_NO_MESH_WARNING")) {
         // (the game draws its foliage, grass and many effects with mesh shaders: without them those draws are left out and the
         // picture is broken (an RX 580's "static"-like scenes, 2026-11-08). Said once, on its own thread, and the game goes on.)

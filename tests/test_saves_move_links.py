@@ -4,11 +4,11 @@ On Linux the saves live in $XDG_DATA_HOME/hookshot, and a user/ folder beside th
 entry at the start (host/hos_main.c saves_dir). A game folder from elsewhere can hold links there (an archive keeps them).
 Builds saves_dir and its copy over host/posix/win32_posix.c's file functions, from the sources as they are, and checks:
 
-- an entry of user/ that is a link (to a folder or a file) is moved as the link it is, never copied through, and what
-  it points to is untouched; the other entries are moved as before;
-- a link by a relative path is not moved (it would name something else there), and the saves stay;
-- a folder that has to be copied (another file system) and holds a link is not copied: it stays, and delete_tree takes
-  a link away without going through it.
+- an entry of user/ that is a link (to a folder or a file) is a link in the saves folder too, never copied through, and
+  what it points to is untouched; the other entries are moved as before;
+- a link by a relative path is made again by the full path it names (#2282), so it names the same thing from there;
+- a folder that has to be copied (another file system) and holds a link gets the link made again, not followed; a FIFO
+  in it fails the copy at once; and delete_tree takes a link away without going through it.
 
 python -I -B tests/test_saves_move_links.py [--cc gcc]
 """
@@ -60,6 +60,10 @@ def main():
         block(posix, "BOOL FindNextFileA(HANDLE h, WIN32_FIND_DATAA *fd) {"),
         block(posix, "BOOL FindClose(HANDLE h) {"),
         block(main_c, "static int is_dir(const char *p) {"),
+        block(main_c, "static int is_link(const char *p) {"),
+        "static const char *move_old, *move_new;",
+        block(main_c, "static int copy_link(const char *from, const char *to) {"),
+        block(main_c, "static int has_link(const char *p) {"),
         block(main_c, "static int copy_tree(const char *from, const char *to) {"),
         block(main_c, "static void delete_tree(const char *p) {"),
         block(main_c, "static const char *saves_dir(const char *beside) {"),
@@ -116,14 +120,17 @@ int main(int argc, char **argv) {
     char key[PATH_MAX];
     snprintf(key, sizeof key, "%s/elsewhere", w);
     CHECK(there(key, "key"));
-    /* a copy (as across file systems) stops at a link inside a folder: the copy fails and the entry stays */
+    /* a copy (as across file systems) makes a link inside a folder again, and does not go through it */
     char from[PATH_MAX], to[PATH_MAX];
     snprintf(from, sizeof from, "%s/copyme", w);
     snprintf(to, sizeof to, "%s/copied", w);
     snprintf(cmd, sizeof cmd, "mkdir -p '%s/in' && echo f > '%s/in/f.sav' && ln -s '%s/elsewhere' '%s/in/away'",
              from, from, w, from);
     CHECK(system(cmd) == 0);
-    CHECK(!copy_tree(from, to));
+    CHECK(copy_tree(from, to));
+    CHECK(there(to, "in/f.sav"));
+    snprintf(p, sizeof p, "%s/in/away", to);
+    CHECK(lstat(p, &st) == 0 && S_ISLNK(st.st_mode));
     /* (and a FIFO in a copied folder fails the copy at once, not waited on) */
     char fifo_from[PATH_MAX], fifo_to[PATH_MAX];
     snprintf(fifo_from, sizeof fifo_from, "%s/fifo", w);
@@ -134,13 +141,16 @@ int main(int argc, char **argv) {
     /* delete_tree takes a link away, never what it names */
     delete_tree(from);
     CHECK(!there(w, "copyme") && there(key, "key"));
-    /* a relative link would name something else from the saves folder: it is not moved, and the saves stay */
+    /* a relative link would name something else from the saves folder: it is made again by the full path it names */
     char rel[PATH_MAX];
     snprintf(rel, sizeof rel, "%s/game2/user", w);
     snprintf(cmd, sizeof cmd, "mkdir -p '%s' && ln -s ../../elsewhere '%s/other'", rel, rel);
     CHECK(system(cmd) == 0);
-    CHECK(!strcmp(saves_dir(rel), rel) && there(rel, "other") && there(key, "key"));
-    printf("PASS: saves_dir moves user/'s links by a full path as links, keeps relative ones; a copy or delete never goes through a link\n");
+    CHECK(!strcmp(saves_dir(rel), saves) && there(key, "key"));
+    char real[PATH_MAX];
+    snprintf(p, sizeof p, "%s/other", saves);
+    CHECK(lstat(p, &st) == 0 && S_ISLNK(st.st_mode) && realpath(p, real) && !strcmp(real, key));
+    printf("PASS: saves_dir makes user/'s links again as links; a copy or delete never goes through a link or waits on a FIFO\n");
     return 0;
 }
 '''
