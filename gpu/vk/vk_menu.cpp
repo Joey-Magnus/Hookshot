@@ -3987,9 +3987,11 @@ void menu_auto_tune(double gpu_ms, double draws, double fps) {
     static const bool on = env_int("RX_VK_AUTO_TUNE", 1) != 0;
     std::lock_guard lk(menu_mu);
     if (!on || opts.preset != kAutoPreset || !auto_for || auto_tuned == auto_for || opts.framegen || tuning.done) return;
-    static const int caps[] = {60, 90, 120, 144, 165, 240};
+    // (the frame time the game runs to: the cap it started with, HOS_FPS_MAX over it, or the display's refresh with V-Sync On;
+    // as the FPS counter's line. Uncapped without V-Sync: the display's refresh, else 60)
+    const double target = fps_target_ms();
     const int refresh = (display_refresh_mhz() + 500) / 1000;
-    const float cap = opts.fps_cap >= 0 && opts.fps_cap < 6 ? (float)caps[opts.fps_cap] : refresh > 0 ? (float)refresh : 60.0f;
+    const float cap = target > 0 ? (float)(1000.0 / target) : refresh > 0 ? (float)refresh : 60.0f;
     const int u = upscaler(), v = opts.resolution;
     if (ur::full_scale(u) || v == 0) return;   // (Native, or Auto's dynamic share: no steps to measure along)
     const int ceiling = auto_start ? auto_start : v;
