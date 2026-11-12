@@ -639,16 +639,17 @@ void sync_preset_budgets(int p) {
 // 3840 x 2160 window at that preset's picture, 2048 x 1152 or the handheld profile's 1536 x 864: same frame, mean |Laplacian|
 // of the window and of the picture, on the slider's steps)
 void env_release(const int* value);   // (below: a row the environment held, set by the menu from now on)
-// (hookshot) the Quality preset "Auto (this PC)": the profile menu_auto_for_gpu chose for this PC (auto_settings.h)
-constexpr int kAutoPreset = 6;
+// (hookshot) the Quality preset "Auto (this PC)", kAutoPreset: the profile menu_auto_for_gpu chose for this PC (auto_settings.h)
 ::auto_settings::Choice auto_choice;   // (tier 0: no profile yet, before the card is known)
 uint64_t auto_for = 0;               // (the fingerprint of the hardware the options' Auto settings were chosen for: auto_for=)
 uint64_t auto_fp = 0;                // (this PC's, menu_auto_for_gpu)
 uint64_t auto_tuned = 0;             // (the fingerprint the measured tuning in play finished for: auto_tuned=)
-void apply_auto();   // (below: the Auto preset's rows)
+int auto_output = -1;                // (the Output resolution Auto set: auto_output=. Another one there is the player's; -1: unknown)
+::auto_settings::Tuning auto_tuning;   // (the measured tuning in play, menu_auto_tune; its steps kept as auto_steps=)
+void apply_auto(bool keep_own);   // (below: the Auto preset's rows)
 void apply_preset(int p) {
     if (p == kAutoPreset) {
-        apply_auto();
+        apply_auto(false);   // (chosen on the row: all of its rows, as any preset)
         return;
     }
     // (the rows it sets are the preset's from now on, even at the value the environment forced: save writes them)
@@ -685,17 +686,34 @@ void apply_preset(int p) {
     opts.budget = p;   // (Custom chosen on this row: no budget, as before)
     sync_preset_budgets(p);
 }
-void apply_auto() {
+/// keep_own (Auto choosing again for new hardware): the preset-exempt rows the player set under Auto stay theirs, the Output
+/// resolution (another than the one Auto set, auto_output) and the VRAM budget row (budget 0, set_row). Mesh shaders Auto never
+/// sets, and the fingerprint has the card's mesh shaders, not the row's mode
+void apply_auto(bool keep_own) {
     const ::auto_settings::Choice& c = auto_choice;
     if (c.tier < 1) return;
+    const bool own_output = keep_own && auto_output >= 0 && opts.output_res != auto_output;
+    const bool own_budget = keep_own && opts.preset == kAutoPreset && opts.budget == 0;
+    const int output = opts.output_res, vram_budget = opts.vram_budget;
+    env_release(&opts.dlss);
+    opts.dlss = c.upscaler;   // (before the tier's rows: apply_preset snaps its Render resolution to this upscaler)
     apply_preset(c.tier);   // (the tier's scaling rows and memory budgets)
     if (c.tier == 1) opts.upscale = 0, opts.sharpness = 0;   // (the plain scale, as RX_VK_LOW_SPEC: the lightest)
     opts.handheld = 0;   // (docked: the handheld profile gave a GTX 1050 a black picture; the Render resolution lightens the card)
-    env_release(&opts.dlss), env_release(&opts.output_res);
-    opts.dlss = c.upscaler;
     if (c.resolution) opts.resolution = ur::snap_render(c.upscaler, c.resolution);
-    opts.output_res = c.output;
+    if (own_output) {
+        opts.output_res = output;
+    } else {
+        env_release(&opts.output_res);
+        opts.output_res = auto_output = c.output;
+    }
+    if (own_budget) {
+        opts.budget = 0;
+        opts.vram_budget = vram_budget;
+        vram_budget_sync();
+    }
     auto_tuned = 0;   // (chosen again: measured again in play)
+    auto_tuning = {};
     opts.preset = kAutoPreset;   // (apply_preset set the tier's number)
     auto_for = auto_fp;          // (chosen for this PC, whether at a start or on the menu's row)
 }
@@ -1515,7 +1533,7 @@ void save() {
             const std::string key(line, (size_t)(eq - line));
             // (memory_budget and auto_for too: save() writes them, and the file's old line, kept after it, won at the next start)
             bool mine = key == "microphone_device" || key == "options_version" || key == "memory_budget" || key == "auto_for" ||
-                        key == "auto_tuned";
+                        key == "auto_tuned" || key == "auto_output" || key == "auto_steps";
             for (const Row& r : rows)
                 if (!mine && r.value && key == ini_key(r)) mine = true;
             if (!mine) others += line, others += others.back() == '\n' ? "" : "\n";
@@ -1538,6 +1556,9 @@ void save() {
         fprintf(f, "memory_budget=%d\n", opts.budget);
         if (auto_for) fprintf(f, "auto_for=%016llx\n", (unsigned long long)auto_for);   // (the hardware Auto (this PC) chose for)
         if (auto_tuned) fprintf(f, "auto_tuned=%016llx\n", (unsigned long long)auto_tuned);   // (and measured in play for)
+        if (auto_for && auto_output >= 0) fprintf(f, "auto_output=%d\n", auto_output);   // (the Output resolution Auto set)
+        // (the tuning's steps so far and whether one went down: the no-seesaw rule and the two steps hold across restarts)
+        if (auto_for && auto_tuning.steps) fprintf(f, "auto_steps=%d,%d\n", auto_tuning.steps, auto_tuning.went_down ? 1 : 0);
         // (2: game_speed below 2 was only ever the old default, see menu_init; 3: the mouse's buttons are bindings, see
         // host/nn_hid.c binds_load; 4: Descriptor reuse on by default, see menu_init and vk_draw.cpp desc_slotgen_on; 5: the
         // Menu shortcut "Insert, F1 or Esc" by default, see menu_init; 6: the Aspect ratio's 16:9 from before moves on a
@@ -3697,6 +3718,12 @@ void menu_init() {
             if (!strcmp(line, "menu_size") && atoi(eq + 1) == 0) menu_auto = true;
             if (!strcmp(line, "auto_for")) auto_for = strtoull(eq + 1, nullptr, 16);
             if (!strcmp(line, "auto_tuned")) auto_tuned = strtoull(eq + 1, nullptr, 16);
+            if (!strcmp(line, "auto_output")) auto_output = atoi(eq + 1);
+            if (!strcmp(line, "auto_steps")) {
+                int steps = 0, down = 0;
+                if (sscanf(eq + 1, "%d,%d", &steps, &down) == 2)
+                    auto_tuning.steps = std::max(steps, 0), auto_tuning.went_down = down != 0;
+            }
             if (!strcmp(line, "memory_budget")) opts.budget = std::min(std::max(atoi(eq + 1), 0), 5), has_memory_budget = true;
             has_vram_budget |= !strcmp(line, "vram_budget");
             if (!strcmp(line, "microphone_device")) {   // (hookshot: the microphone, by its name)
@@ -3771,7 +3798,8 @@ void menu_init() {
 /// picks from the hardware. A first start (no options file yet) starts on it. With Auto on, the profile is applied when the
 /// hardware it was chosen for changes (another card, its memory, the screen's size, a build with or without DLSS or FSR 4):
 /// the fingerprint is kept in the options file (auto_for=). Changing a row yourself comes back to Custom, and then nothing here
-/// touches the settings. Before Auto, a first start chose Minimum or Low by the card's memory alone: an older or smaller card no
+/// touches the settings; the rows no preset sets (the Output resolution, the VRAM budget, Mesh shaders) leave it on Auto, and
+/// what the player set on them is kept when Auto chooses again (apply_auto keep_own). Before Auto, a first start chose Minimum or Low by the card's memory alone: an older or smaller card no
 /// longer starts at the docked 2048 x 1152 with the full-size budget (a GTX 1050 lost the device at the first scene that way,
 /// Discord 2026-11-10). RX_VK_AUTO_PRESET=0: a first start keeps the defaults, as before Auto.
 /// RX_VK_AUTO_PRESET_VRAM_MB=<n>: the card's memory taken as n MB, to try the choice for a smaller or larger card
@@ -3795,7 +3823,7 @@ void menu_auto_for_gpu(const VkPhysicalDeviceProperties& props, ::auto_settings:
         logf("vk: Auto (this PC): the settings chosen for this PC before (%s)", hw_line);
         return;
     }
-    apply_auto();
+    apply_auto(!first);   // (the hardware changed: the Output resolution and VRAM budget the player set stay theirs)
     restart_init();   // (what this run starts with: the Output resolution applies at the next start, unless this is the first)
     save();   // (host/nn_applet.c reads handheld_profile and output_res from the file when the game first asks its mode, after this)
     logf("vk: Auto (this PC): %s: %s (%s)", first ? "first start" : "the hardware changed", auto_choice.why, hw_line);
@@ -3983,13 +4011,34 @@ bool walk_to(State state, At at, Step step, int limit) {
 /// (hookshot) The Quality preset Auto (this PC)'s measured tuning in play (auto_settings.h tune): each of the replay's 120-present
 /// windows (vk_replay.cpp), the Render resolution one step lighter while frames are missed with the GPU over 90% of the cap's
 /// frame time, or one heavier while the cap holds with the GPU under 50%, up to the best mode that still upscales (never
-/// native); at most two steps, then done for this PC (auto_tuned=). Not with Frame
-/// generation on (the frames shown are not the game's) nor with another preset. RX_VK_AUTO_TUNE=0: off
+/// native); at most two steps (kept across restarts, auto_steps=), then done for this PC (auto_tuned=). The CPU holding the
+/// frame rate ends it for this run only. Not with Frame generation on (the frames shown are not the game's) nor with another
+/// preset. RX_VK_AUTO_TUNE=0: off. Before the tuning, in play (the upscaler has run, NGX has answered): the Render resolution for
+/// the upscaler that runs, when it is not the one Auto chose (auto_settings.h resolution_for)
 void menu_auto_tune(double gpu_ms, double draws, double fps) {
-    static ::auto_settings::Tuning tuning;
     static const bool on = env_int("RX_VK_AUTO_TUNE", 1) != 0;
+    ::auto_settings::Tuning& tuning = auto_tuning;
     std::lock_guard lk(menu_mu);
-    if (!on || opts.preset != kAutoPreset || !auto_for || auto_tuned == auto_for || opts.framegen || tuning.done) return;
+    if (opts.preset != kAutoPreset || !auto_for) return;
+    if (draws >= 150) {
+        const ::auto_settings::Choice& c = auto_choice;
+        const int u = upscaler(), v = opts.resolution;
+        const int to = ::auto_settings::resolution_for(c, ur::engine(u), v, c.resolution ? ur::snap_render(c.upscaler, c.resolution) : 0);
+        if (to && ur::snap_render(u, to) != v) {
+            opts.resolution = ur::snap_render(u, to);
+            env_release(&opts.resolution);
+            samplers_changed();
+            menu_refresh = true;
+            tuning.n = 0;   // (the windows gathered were at the other share)
+            static const char* const name[ur::kUpscalers] = {"the game's own", "DLSS", "DLAA", "FSR 3.1", "FSR 4", "FSR 4", "Off"};
+            logf("vk: Auto (this PC): %s runs, not the %s chosen: Render resolution %d%% -> %d%%",
+                 name[std::clamp(u, 0, ur::kUpscalers - 1)], name[std::clamp(c.upscaler, 0, ur::kUpscalers - 1)], ur::percent(v),
+                 ur::percent(opts.resolution));
+            save();
+            return;
+        }
+    }
+    if (!on || auto_tuned == auto_for || opts.framegen || tuning.done) return;
     // (the frame time the game runs to: the cap it started with, HOS_FPS_MAX over it, or the display's refresh with V-Sync On;
     // as the FPS counter's line. Uncapped without V-Sync: the display's refresh, else 60)
     const double target = fps_target_ms();
@@ -4011,13 +4060,17 @@ void menu_auto_tune(double gpu_ms, double draws, double fps) {
         menu_refresh = true;
         logf("vk: Auto (this PC), measured in play: %.0f fps of %.0f, the GPU at %.1f ms a frame of %.1f: Render resolution %d%% -> "
              "%d%%", tuning.fps_mid, cap, tuning.gpu_mid, 1000.0 / cap, ur::percent(v), ur::percent(opts.resolution));
+    } else if (verdict == ::auto_settings::CPU_BOUND) {
+        // (this run only: early in play pipelines may still be compiling and textures streaming in; the next start measures again)
+        logf("vk: Auto (this PC), measured in play: the CPU holds the frame rate (%.0f fps of %.0f, the GPU at %.1f ms a frame of "
+             "%.1f): Render resolution %d%% kept for this run", tuning.fps_mid, cap, tuning.gpu_mid, 1000.0 / cap, ur::percent(v));
+        return;
     } else {
         auto_tuned = auto_for;
-        logf("vk: Auto (this PC), measured in play: %s (%.0f fps of %.0f, the GPU at %.1f ms a frame of %.1f): Render resolution "
-             "%d%% kept", verdict == ::auto_settings::CPU_BOUND ? "the CPU holds the frame rate" : "settled", tuning.fps_mid, cap,
-             tuning.gpu_mid, 1000.0 / cap, ur::percent(v));
+        logf("vk: Auto (this PC), measured in play: settled (%.0f fps of %.0f, the GPU at %.1f ms a frame of %.1f): Render resolution "
+             "%d%% kept", tuning.fps_mid, cap, tuning.gpu_mid, 1000.0 / cap, ur::percent(v));
     }
-    save();
+    save();   // (after a step too: its steps, auto_steps=, so a restart before the next verdict keeps the no-seesaw rule)
 }
 
 /// The settings row whose ini key is key, set to value as the menu's Left and Right set it (set_row: cut to its range, the

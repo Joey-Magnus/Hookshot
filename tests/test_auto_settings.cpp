@@ -65,6 +65,36 @@ int main() {
     c = choose(gtx);
     expect(c.tier == 1 && std::strstr(c.why, "fallback"), "no mesh shaders: Minimum");
 
+    // (a card that has mesh shaders, run as compute: Linux AMD's Automatic (#2245) or the Mesh shaders row's Compute. Its
+    // tier is its memory's, and the run's mode is not in the fingerprint: changing the row does not make Auto choose again)
+    Hardware radv;
+    radv.vendor = AMD, radv.vram_mb = 16368, radv.screen_w = 2560, radv.screen_h = 1440, radv.mesh_as_compute = true;
+    c = choose(radv);
+    expect(c.tier == 5 && c.output == 1, "RX 6800 on RADV, mesh shaders run as compute: Ultra, not Minimum");
+    expect(std::strstr(c.why, "run as compute") && !std::strstr(c.why, "fallback"), c.why);
+    Hardware radv_native = radv;
+    radv_native.mesh_as_compute = false;
+    expect(choose(radv_native).tier == c.tier, "the same card with mesh shaders native: the same tier");
+    expect(fingerprint(radv, 0x1002, 0x73bf) == fingerprint(radv_native, 0x1002, 0x73bf),
+           "the run's mesh mode: the same fingerprint");
+    Hardware rx5700 = radv;
+    rx5700.mesh_native = false, rx5700.mesh_as_compute = false;
+    expect(choose(rx5700).tier == 1, "an RX 5700 (no mesh shaders, the same memory): Minimum");
+    expect(fingerprint(rx5700, 0x1002, 0x73bf) != fingerprint(radv, 0x1002, 0x73bf), "mesh shaders or not: another fingerprint");
+
+    // (High from 11.5 GB: 10 and 11 GB cards on Balanced, 12 GB cards (12,000-12,288 MB) on High)
+    Hardware ten;
+    ten.vendor = NVIDIA, ten.vram_mb = 10240;
+    expect(choose(ten).tier == 3, "RTX 3080 10 GB: Balanced");
+    ten.vram_mb = 11264;
+    expect(choose(ten).tier == 3, "RTX 2080 Ti 11 GB: Balanced");
+    ten.vram_mb = 11776;
+    expect(choose(ten).tier == 3, "11.5 GB: Balanced");
+    ten.vram_mb = 12000;
+    expect(choose(ten).tier == 4, "a 12 GB card reporting 12,000 MB: High");
+    ten.vram_mb = 9216;
+    expect(choose(ten).tier == 3, "9 GB: Balanced");
+
     Hardware lowram;
     lowram.vendor = NVIDIA, lowram.vram_mb = 12282, lowram.ram_mb = 8192;
     c = choose(lowram);
@@ -82,6 +112,30 @@ int main() {
     moved = h;
     moved.vram_mb += 3;   // (the heap's size wobbles by a few MB between drivers)
     expect(fingerprint(h, 0x10de, 0x2782) == fingerprint(moved, 0x10de, 0x2782), "a few MB more memory: the same fingerprint");
+
+    // (the upscaler that runs: DLSS or FSR 4 chosen from the build, but not running on this PC)
+    expect(kTierResolution[1] == 4 && kTierResolution[2] == 2 && kTierResolution[3] == 1 && ur::percent(kTierResolution[2]) == 75,
+           "the tiers' own Render resolution: 50%, 75%, then 100%");
+    {
+        Hardware rtx = h;
+        rtx.dlss_built = true;
+        const Choice q = choose(rtx);   // (High, DLSS Quality 67%)
+        const int chosen = ur::snap_render(q.upscaler, q.resolution);
+        expect(resolution_for(q, GAME, chosen, chosen) == kTierResolution[q.tier],
+               "DLSS chosen, the game's own runs: back to the tier's own (100%)");
+        expect(resolution_for(q, DLSS, chosen, chosen) == 0, "DLSS chosen and running: as it is");
+        expect(resolution_for(q, DLSS, kTierResolution[q.tier], chosen) == q.resolution,
+               "DLSS running again at the tier's own: back to the choice");
+        const int tuned = ur::step(GAME, kTierResolution[q.tier], 1);
+        expect(resolution_for(q, GAME, tuned, chosen) == 0, "a step the tuning made: left alone");
+        Hardware six_fsr;
+        six_fsr.vendor = AMD, six_fsr.rdna4 = true, six_fsr.fsr4_built = true, six_fsr.vram_mb = 6144;
+        const Choice l = choose(six_fsr);   // (Low, FSR 4 Performance 50%)
+        expect(l.tier == 2 && resolution_for(l, GAME, ur::snap_render(l.upscaler, l.resolution),
+                                             ur::snap_render(l.upscaler, l.resolution)) == kTierResolution[2],
+               "FSR 4 chosen at Low, the game's own runs: Low's own 75%");
+        expect(resolution_for(choose(r6600), GAME, 1, 1) == 0, "the game's own chosen: as it is");
+    }
 
     // (the tuning in play)
     expect(best_step(DLSS) == RES_QUALITY && best_step(FSR4) == RES_QUALITY && best_step(3) == RES_QUALITY &&
@@ -130,6 +184,31 @@ int main() {
         Tuning t;
         for (int i = 0; i < kWindows - 1; i++) tune(t, 18.0f, 900, 55, 60, false, true);
         expect(tune(t, 18.0f, 900, 55, 60, false, true) == KEEP, "no lighter step left: keep");
+    }
+    {
+        // (40 fps under a 60 cap with the GPU at 17 ms, over the 16.7 ms budget: the GPU's limit, not the CPU's, though it is
+        // under 75% of the 25 ms frame shown)
+        Tuning t;
+        for (int i = 0; i < kWindows - 1; i++) tune(t, 17.0f, 900, 40, 60, true, true);
+        expect(tune(t, 17.0f, 900, 40, 60, true, true) == LIGHTER, "40 fps, the GPU at 17 ms of 16.7: one step lighter");
+    }
+    {
+        Tuning t;
+        for (int i = 0; i < kWindows - 1; i++) tune(t, 14.0f, 900, 50, 60, true, true);
+        expect(tune(t, 14.0f, 900, 50, 60, true, true) == CPU_BOUND && t.steps == 0,
+               "50 fps, the GPU at 14 ms (under 0.9 of 16.7 and 0.75 of 20): the CPU holds it, nothing changed");
+    }
+    {
+        // (the steps kept across restarts, as menu_init restores them from auto_steps=: after a step down, a new run with the cap
+        // held and the GPU idle does not step back up)
+        Tuning t;
+        t.steps = 1, t.went_down = true;
+        for (int i = 0; i < kWindows - 1; i++) tune(t, 5.0f, 900, 60, 60, true, true);
+        expect(tune(t, 5.0f, 900, 60, 60, true, true) == KEEP, "restored after a step down: never back up");
+        Tuning u;
+        u.steps = kMaxSteps;
+        for (int i = 0; i < kWindows - 1; i++) tune(u, 25.0f, 900, 40, 60, true, true);
+        expect(tune(u, 25.0f, 900, 40, 60, true, true) == KEEP, "restored at two steps: no third");
     }
 
     if (failures) return EXIT_FAILURE;

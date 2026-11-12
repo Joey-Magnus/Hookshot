@@ -17,7 +17,9 @@ struct Hardware {
     int vendor = OTHER;
     bool integrated = false;
     bool handheld = false;      // (a Steam Deck or another handheld PC: its own small screen and a shared memory budget)
-    bool mesh_native = true;    // (false: the mesh programs run as compute, the fallback, slower)
+    bool mesh_native = true;    // (the card has mesh shaders, by its feature query; false: the fallback, the mesh programs as compute)
+    bool mesh_as_compute = false;   // (this run runs them as compute all the same: the Mesh shaders row's Compute, or Linux AMD's
+                                    // Automatic, #2245. The card's tier is its own: not for the choice nor the fingerprint)
     bool rtx = false;           // (an NVIDIA RTX card: DLSS's tensor cores)
     bool rdna4 = false;         // (an AMD RDNA 4 card, RX 9000: FSR 4)
     bool dlss_built = false;    // (the game was built with NVIDIA's DLSS SDK)
@@ -50,13 +52,19 @@ constexpr int kOutputTier[] = {0, 3, 4, 3, 4, 5};
 enum { GAME = 0, DLSS = 1, FSR4 = 4 };
 enum { RES_QUALITY = 3, RES_PERFORMANCE = 4, RES_BALANCED = 5 };
 
-// The memory tier: the presets' own steps (Minimum 4 GB, Low 6, Balanced 8, High 12, Ultra 16+). An integrated GPU, a
-// handheld or a card running the mesh fallback starts at Minimum whatever its memory says: the memory it reports is shared
-// with the system, or the fallback costs the frame more than the memory saves
+// The Render resolution each preset sets (vk_menu.cpp apply_preset; tests/test_auto_settings.py checks they agree): the tier's
+// own, with the game's own upscaler
+constexpr int kTierResolution[] = {0, 4, 2, 1, 1, 1};
+
+// The memory tier: the presets' own steps (Minimum 4 GB, Low 6, Balanced 8, High 12, Ultra 16+). High from 11.5 GB: its 7.5 GB
+// of textures and 2 GB of mirrors leave a 10 or 11 GB card (RTX 3080, RX 6700, RTX 2080 Ti) too little for its targets and the
+// upscaler, and 12 GB cards report 12,000-12,288 MB. An integrated GPU, a handheld or a card without mesh shaders starts at
+// Minimum whatever its memory says: the memory it reports is shared with the system, or the fallback costs the frame more than
+// the memory saves
 inline int tier_of(const Hardware& h) {
     if (h.integrated || h.handheld || !h.mesh_native) return 1;
     const uint32_t mb = h.vram_mb;
-    int t = mb <= 4608 ? 1 : mb <= 6656 ? 2 : mb <= 9216 ? 3 : mb <= 13312 ? 4 : 5;
+    int t = mb <= 4608 ? 1 : mb <= 6656 ? 2 : mb <= 11776 ? 3 : mb <= 13312 ? 4 : 5;
     // (under 12 GB of RAM the game's memory and the copies the driver keeps of its textures leave little: a lower tier's
     // smaller budgets)
     if (h.ram_mb && h.ram_mb < 12288 && t > 2) t = 2;
@@ -79,6 +87,7 @@ inline Choice choose(const Hardware& h) {
         std::snprintf(b, sizeof b, "%u MB of video memory: tier %d", (unsigned)h.vram_mb, c.tier);
         add(c, b);
         if (h.ram_mb && h.ram_mb < 12288 && c.tier == 2 && h.vram_mb > 6656) add(c, "under 12 GB of RAM: held at Low");
+        if (h.mesh_as_compute) add(c, "mesh shaders run as compute this run (the card has them: its tier all the same)");
     }
     // The upscaler: the one the card has hardware for, else the game's own (on every card, and what the presets were tuned
     // on). At Minimum the game's own at its lowest share is the lightest
@@ -115,6 +124,19 @@ inline Choice choose(const Hardware& h) {
     return c;
 }
 
+// The Render resolution for the upscaler that runs (the engine, upscaler_rows.h engine), unsnapped; 0: as it is. The build having
+// DLSS or FSR 4 does not say this PC runs it (an old driver, no NGX libraries, #1748): when the game's own runs instead, it draws
+// at DLSS's share, under what the tier sets for it, so it goes back to the tier's own; and to the choice's when the chosen one
+// runs again. Only between those two: a step the tuning made is left alone. chosen: the choice's Render resolution as the menu
+// set it (snapped to its upscaler)
+inline int resolution_for(const Choice& c, int engine, int resolution, int chosen) {
+    if (c.tier < 1 || c.upscaler == GAME || !c.resolution) return 0;
+    const int own = kTierResolution[c.tier];
+    if (engine != c.upscaler && resolution == chosen && own != chosen) return own;
+    if (engine == c.upscaler && resolution == own && own != chosen) return c.resolution;
+    return 0;
+}
+
 // The fingerprint the options file keeps (auto_for=): the choice is made again when the hardware it was made for changes
 inline uint64_t fingerprint(const Hardware& h, uint32_t vendor_id, uint32_t device_id) {
     uint64_t f = 1469598103934665603ull;
@@ -128,15 +150,17 @@ inline uint64_t fingerprint(const Hardware& h, uint32_t vendor_id, uint32_t devi
 // replay's 120 presents (vk_replay.cpp): the GPU's time a frame, the draws a frame and the frame rate. Only windows of play count
 // (150 draws a frame or more, as the control bridge's "play"; menus and loading screens draw fewer). After kWindows of them,
 // their middle values decide, lowering the picture only where frames are missed and raising it only with room to spare:
-// - frames missed (under 95% of the cap) while the GPU is idle for a quarter of the frame or more: the CPU holds it (the game's
-//   threads, the replay), and a smaller picture would not help: done, nothing changed
-// - frames missed and the GPU over 90% of the cap's frame time: one step smaller (lighter). A PC that holds its cap keeps its
-//   picture however busy the GPU is
+// - frames missed (under 95% of the cap) and the GPU over 90% of the cap's frame time: one step smaller (lighter). A PC that
+//   holds its cap keeps its picture however busy the GPU is
+// - frames missed with the GPU under 90% of the cap's frame time and idle for a quarter of the frame shown or more: the CPU
+//   holds it (the game's threads, the replay), and a smaller picture would not help: done for this run, nothing changed. Not
+//   for good (the menu writes no auto_tuned): early in play pipelines may still be compiling and textures streaming in
 // - the cap held and the GPU under 50% of its frame time: one step larger, past what the profile chose (the memory tier sets
 //   the budgets, not how fast the GPU is) up to the best mode that still upscales (best_step: Quality, or the game's own at
 //   100%), never native (DLAA, FSR 4's native AA), whose larger images 8 GB cards ran out of memory with
 // - else: done
-// At most kMaxSteps changes in all; a step down is never followed by a step up (no seesaw). Then done until the hardware changes
+// At most kMaxSteps changes in all; a step down is never followed by a step up (no seesaw). Then done until the hardware changes.
+// steps and went_down are kept in the options file (auto_steps=), so both hold across restarts too
 constexpr int kWindows = 8;
 constexpr int kMaxSteps = 2;
 enum Verdict : int { WAIT = 0, KEEP = 1, CPU_BOUND = 2, LIGHTER = 3, HEAVIER = 4 };
@@ -165,8 +189,8 @@ inline Verdict tune(Tuning& t, float gpu_ms, float draws, float fps, float cap_f
     const float g = middle(t.gpu_ms, t.n), f = middle(t.fps, t.n), budget = 1000.0f / cap_fps;
     t.n = 0, t.gpu_mid = g, t.fps_mid = f;
     const bool missed = f < cap_fps * 0.95f;
-    if (missed && g < 0.75f * (1000.0f / f)) return t.done = true, CPU_BOUND;
     if (missed && g > 0.9f * budget && can_lighter && t.steps < kMaxSteps) return t.steps++, t.went_down = true, LIGHTER;
+    if (missed && g < 0.9f * budget && g < 0.75f * (1000.0f / f)) return t.done = true, CPU_BOUND;
     if (!missed && g < 0.5f * budget && can_heavier && !t.went_down && t.steps < kMaxSteps) return t.steps++, HEAVIER;
     t.done = true;
     return KEEP;

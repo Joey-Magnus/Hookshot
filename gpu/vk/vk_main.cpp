@@ -295,6 +295,14 @@ bool create_device() {
     // only full Compute is stable there, and the reports span Navi 2x (RX 6800, RX 6600 XT) and the RDNA3 APUs (Steam
     // Deck OLED, Rog Xbox Ally X). On Linux, where AMD's Vulkan driver is RADV, Automatic picks Compute; Native stays
     // a choice in the row. RDNA1 and older have no mesh shaders on RADV: for them a no-op.
+    // (the card's own, before the mode below: whether it has task and mesh shaders, for the Quality preset Auto (this PC), which
+    // must not put a card that has them on Minimum because this run uses Compute)
+    if (has_extension(exts, VK_EXT_MESH_SHADER_EXTENSION_NAME)) {
+        VkPhysicalDeviceMeshShaderFeaturesEXT m{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT};
+        VkPhysicalDeviceFeatures2 f2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, &m};
+        vkGetPhysicalDeviceFeatures2(dev.physical, &f2);
+        dev.mesh_capable = m.meshShader && m.taskShader;
+    }
     int mesh_mode_used = mesh_mode;
 #ifndef _WIN32
     if (mesh_mode_used == 0 && dev.props.vendorID == 0x1002) mesh_mode_used = 2;   // (Linux AMD is RADV)
@@ -1418,7 +1426,8 @@ void auto_profile() {
     for (uint32_t i = 0; i < dev.memory.memoryHeapCount; i++)
         if (dev.memory.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT)
             hw.vram_mb = std::max<uint32_t>(hw.vram_mb, (uint32_t)(dev.memory.memoryHeaps[i].size >> 20));
-    hw.mesh_native = dev.mesh_shader;
+    hw.mesh_native = dev.mesh_capable;   // (the card's, not this run's mode: Linux AMD's Automatic is Compute, #2245)
+    hw.mesh_as_compute = dev.mesh_capable && !dev.mesh_shader;
     hw.rtx = hw.vendor == ::auto_settings::NVIDIA && strstr(p.deviceName, "RTX");
     // (RDNA 4: "AMD Radeon RX 9070 XT", RADV's "(RADV GFX1201)")
     hw.rdna4 = hw.vendor == ::auto_settings::AMD && (strstr(p.deviceName, "RX 9") || strstr(p.deviceName, "GFX12"));
