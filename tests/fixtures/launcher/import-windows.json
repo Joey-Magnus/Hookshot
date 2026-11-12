@@ -1,0 +1,21 @@
+{
+  "format": 1,
+  "folder": "C:\\Users\\player\\Games\\Hookshot",
+  "version": "v2.3.0-rc.2",
+  "track": "rc",
+  "default": true,
+  "settings": {
+    "nup": "C:\\Users\\player\\Downloads\\game.nup",
+    "romfs": null,
+    "exefs": null,
+    "language": "fr-FR",
+    "dlss": true,
+    "dlssLicense": true,
+    "fsr": false,
+    "fsrLicense": false,
+    "prepareShaders": true,
+    "memoryGb": 12,
+    "jobs": null,
+    "work": "D:\\HookshotWork"
+  }
+}

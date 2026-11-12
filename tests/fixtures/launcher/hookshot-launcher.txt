@@ -1,0 +1,6 @@
+# A launcher release's hookshot-launcher.txt (docs/launcher-upgrade.md, section 1). Sample checksums.
+tag v3.0.0
+format 1
+launcher windows-x64 1111111111111111111111111111111111111111111111111111111111111111 52428800 https://github.com/NotRexed/Hookshot/releases/download/v3.0.0/HookshotLauncher-v3.0.0-Windows-x64.zip
+launcher linux-x64 2222222222222222222222222222222222222222222222222222222222222222 73400320 https://github.com/NotRexed/Hookshot/releases/download/v3.0.0/Hookshot-v3.0.0-x86_64.AppImage
+launcher macos-arm64 3333333333333333333333333333333333333333333333333333333333333333 1000 https://example.invalid/skipped
