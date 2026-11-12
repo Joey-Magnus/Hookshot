@@ -43,7 +43,7 @@ def check_source():
                                # (the measured tuning in play: from the replay's windows, finished once for this PC, its steps
                                # kept across restarts)
                                "::auto_settings::tune(tuning,", 'fprintf(f, "auto_tuned=%016llx\\n"', 'fprintf(f, "auto_steps=%d,%d\\n"',
-                               'if (!strcmp(line, "auto_steps"))', 'fprintf(f, "auto_output=%d\\n"',
+                               'if (!strcmp(line, "auto_steps"))', 'fprintf(f, "auto_output=%ux%u\\n"',
                                # (the hardware changed: the exempt rows the player set under Auto stay theirs)
                                "apply_auto(!first);", "apply_auto(false);"])
     need("vk_menu.h", (ROOT / "gpu/vk/vk_menu.h").read_text(encoding="utf-8"), ["constexpr int kAutoPreset = 6;"])
@@ -53,6 +53,9 @@ def check_source():
     auto = body(menu, "void apply_auto(bool keep_own) {")
     if not auto.index("opts.dlss = c.upscaler;") < auto.index("apply_preset(c.tier);"):
         raise SystemExit("apply_auto: opts.dlss must be set before apply_preset")
+    # (the Output resolution Auto set is kept by its size: the choices' numbers follow the screen's modes, #2566)
+    need("apply_auto", auto, ["auto_output.w = o.w, auto_output.h = o.h;",
+                              "!(set.w == auto_output.w && set.h == auto_output.h)"])
     # (the CPU holding the frame rate ends the tuning for this run only: no auto_tuned for it)
     tune = body(menu, "void menu_auto_tune(double gpu_ms, double draws, double fps) {")
     need("menu_auto_tune", tune, ["::auto_settings::resolution_for(c, ur::engine(u), v,"])

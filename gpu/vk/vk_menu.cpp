@@ -881,7 +881,9 @@ void env_release(const int* value);   // (below: a row the environment held, set
 uint64_t auto_for = 0;               // (the fingerprint of the hardware the options' Auto settings were chosen for: auto_for=)
 uint64_t auto_fp = 0;                // (this PC's, menu_auto_for_gpu)
 uint64_t auto_tuned = 0;             // (the fingerprint the measured tuning in play finished for: auto_tuned=)
-int auto_output = -1;                // (the Output resolution Auto set: auto_output=. Another one there is the player's; -1: unknown)
+// (the Output resolution Auto set, by its size: auto_output=<w>x<h>. Another size there is the player's; 0 x 0: unknown. Not the
+// choice's number: the choices follow the screen's modes (#2566), and a new screen is when Auto chooses again)
+struct { uint32_t w = 0, h = 0; } auto_output;
 ::auto_settings::Tuning auto_tuning;   // (the measured tuning in play, menu_auto_tune; its steps kept as auto_steps=)
 void apply_auto(bool keep_own);   // (below: the Auto preset's rows)
 void apply_preset(int p) {
@@ -929,7 +931,8 @@ void apply_preset(int p) {
 void apply_auto(bool keep_own) {
     const ::auto_settings::Choice& c = auto_choice;
     if (c.tier < 1) return;
-    const bool own_output = keep_own && auto_output >= 0 && opts.output_res != auto_output;
+    const Out set = output_at(opts.output_res);
+    const bool own_output = keep_own && auto_output.w && !(set.w == auto_output.w && set.h == auto_output.h);
     const bool own_budget = keep_own && opts.preset == kAutoPreset && opts.budget == 0;
     const int output = opts.output_res, vram_budget = opts.vram_budget;
     env_release(&opts.dlss);
@@ -950,7 +953,9 @@ void apply_auto(bool keep_own) {
             if ((int)offered[i].w == c.output_w && (int)offered[i].h == c.output_h) at = i;
         if (c.output_w && !at)
             logf("vk: Auto (this PC): the screen's %dx%d is not among the Output resolution's choices: 2048x1152", c.output_w, c.output_h);
-        opts.output_res = auto_output = at;
+        opts.output_res = at;
+        const Out o = output_at(at);
+        auto_output.w = o.w, auto_output.h = o.h;
     }
     if (own_budget) {
         opts.budget = 0;
@@ -1841,7 +1846,8 @@ void save() {
         fprintf(f, "memory_budget=%d\n", opts.budget);
         if (auto_for) fprintf(f, "auto_for=%016llx\n", (unsigned long long)auto_for);   // (the hardware Auto (this PC) chose for)
         if (auto_tuned) fprintf(f, "auto_tuned=%016llx\n", (unsigned long long)auto_tuned);   // (and measured in play for)
-        if (auto_for && auto_output >= 0) fprintf(f, "auto_output=%d\n", auto_output);   // (the Output resolution Auto set)
+        if (auto_for && auto_output.w)   // (the Output resolution Auto set, by its size)
+            fprintf(f, "auto_output=%ux%u\n", (unsigned)auto_output.w, (unsigned)auto_output.h);
         // (the tuning's steps so far and whether one went down: the no-seesaw rule and the two steps hold across restarts)
         if (auto_for && auto_tuning.steps) fprintf(f, "auto_steps=%d,%d\n", auto_tuning.steps, auto_tuning.went_down ? 1 : 0);
         // (2: game_speed below 2 was only ever the old default, see menu_init; 3: the mouse's buttons are bindings, see
@@ -4008,7 +4014,10 @@ void menu_init() {
             if (!strcmp(line, "menu_size") && atoi(eq + 1) == 0) menu_auto = true;
             if (!strcmp(line, "auto_for")) auto_for = strtoull(eq + 1, nullptr, 16);
             if (!strcmp(line, "auto_tuned")) auto_tuned = strtoull(eq + 1, nullptr, 16);
-            if (!strcmp(line, "auto_output")) auto_output = atoi(eq + 1);
+            if (!strcmp(line, "auto_output")) {   // (<w>x<h>; a number from before is unknown: 0 x 0)
+                unsigned w = 0, h = 0;
+                if (sscanf(eq + 1, "%ux%u", &w, &h) == 2) auto_output.w = w, auto_output.h = h;
+            }
             if (!strcmp(line, "auto_steps")) {
                 int steps = 0, down = 0;
                 if (sscanf(eq + 1, "%d,%d", &steps, &down) == 2)
