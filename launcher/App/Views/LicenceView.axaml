@@ -1,0 +1,22 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:HookshotLauncher.ViewModels"
+             x:Class="HookshotLauncher.Views.LicenceView"
+             x:DataType="vm:LicenceViewModel">
+  <Border Classes="dialog">
+    <StackPanel>
+      <TextBlock Classes="modaltitle" Text="{Binding Title}"/>
+      <TextBlock Classes="sub" Text="{Binding Sub}"/>
+      <Border Margin="0,14,0,0" MaxHeight="170" Padding="14,12" CornerRadius="8" Background="#26000000"
+              BorderBrush="{StaticResource GlassLine}" BorderThickness="1">
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <SelectableTextBlock Text="{Binding Text}" TextWrapping="Wrap" FontSize="13" Foreground="{StaticResource InkSoft}"/>
+        </ScrollViewer>
+      </Border>
+      <StackPanel Classes="buttons">
+        <Button Content="Decline" Command="{Binding DeclineCommand}"/>
+        <Button Classes="primary" Content="Accept" Command="{Binding AcceptCommand}"/>
+      </StackPanel>
+    </StackPanel>
+  </Border>
+</UserControl>

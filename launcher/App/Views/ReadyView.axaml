@@ -1,0 +1,38 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:HookshotLauncher.ViewModels"
+             xmlns:c="using:HookshotLauncher.Controls"
+             x:Class="HookshotLauncher.Views.ReadyView"
+             x:DataType="vm:ReadyViewModel">
+  <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+    <Border Width="84" Height="84" CornerRadius="42" Background="{StaticResource GoSoft}" HorizontalAlignment="Center"
+            BoxShadow="0 0 60 0 #8C5FB08A, 0 0 0 10 #125FB08A">
+      <c:Icon Kind="check" Width="36" Height="36" Foreground="{StaticResource Go}"/>
+    </Border>
+    <TextBlock Classes="heading" Text="{Binding Heading}" HorizontalAlignment="Center" Margin="0,26,0,0"/>
+    <TextBlock Classes="sub" Text="{Binding Sub}" TextAlignment="Center" HorizontalAlignment="Center" MaxWidth="700"/>
+    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" Margin="0,10,0,0" IsVisible="{Binding HasMoved}">
+      <c:Icon Kind="disk" Width="15" Height="15" Foreground="{StaticResource Go}" VerticalAlignment="Center"/>
+      <TextBlock FontSize="13" Foreground="{StaticResource Go}" Text="{Binding MovedText}" VerticalAlignment="Center"/>
+      <Button Classes="link soft" Content="Open backup" Command="{Binding BackupCommand}" IsVisible="{Binding HasBackup}"
+              ToolTip.Tip="{Binding Backup}" Margin="4,0,0,0"/>
+    </StackPanel>
+    <TextBlock FontSize="13" Foreground="{StaticResource Warn}" Text="{Binding Problem}" IsVisible="{Binding HasProblem}" TextWrapping="Wrap"
+               TextAlignment="Center" MaxWidth="640" Margin="0,10,0,0"/>
+    <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Center" Margin="0,28,0,0">
+      <Button Classes="go" Command="{Binding PlayCommand}">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <c:Icon Kind="play" Width="18" Height="18"/>
+          <TextBlock Text="Play"/>
+        </StackPanel>
+      </Button>
+      <Button Classes="tall" Content="Open folder" Command="{Binding FolderCommand}"/>
+    </StackPanel>
+    <StackPanel Orientation="Horizontal" Spacing="22" HorizontalAlignment="Center" Margin="0,24,0,0">
+      <CheckBox Classes="tick" Content="Desktop shortcut" IsChecked="{Binding Desktop}"/>
+      <CheckBox Classes="tick" Content="{Binding MenuLabel}" IsChecked="{Binding Menu}"/>
+      <CheckBox Classes="tick" Content="Play starts this version" IsChecked="{Binding IsDefault}" IsVisible="{Binding ShowDefaultTick}"/>
+    </StackPanel>
+    <Button Classes="link soft" Content="Back to your versions" Command="{Binding HomeCommand}" HorizontalAlignment="Center" Margin="0,22,0,0"/>
+  </StackPanel>
+</UserControl>

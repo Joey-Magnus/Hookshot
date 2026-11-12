@@ -1,0 +1,280 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:HookshotLauncher.ViewModels"
+             xmlns:c="using:HookshotLauncher.Controls"
+             x:Class="HookshotLauncher.Views.SettingsStepView"
+             x:DataType="vm:SettingsStepViewModel">
+  <!-- Step 2 (the mockup's wizard2): every row a title, a line saying what the choice means, and one control on the right -->
+  <UserControl.Styles>
+    <Style Selector="Grid.srow">
+      <Setter Property="MinHeight" Value="40"/>
+      <Setter Property="Margin" Value="14,8"/>
+      <Setter Property="ColumnSpacing" Value="16"/>
+    </Style>
+    <Style Selector="TextBlock.rtitle">
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="TextBlock.rtitle.off">
+      <Setter Property="Foreground" Value="{StaticResource InkFaintText}"/>
+    </Style>
+    <Style Selector="TextBlock.rdesc">
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="Foreground" Value="{StaticResource InkSoft}"/>
+      <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+    <Style Selector="TextBlock.glabel">
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Foreground" Value="{StaticResource InkSoft}"/>
+      <Setter Property="LetterSpacing" Value="0.48"/>
+      <Setter Property="Margin" Value="0,12,0,6"/>
+    </Style>
+    <Style Selector="Border.card.on">
+      <Setter Property="BorderBrush" Value="#595FB08A"/>
+      <Setter Property="Background">
+        <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+          <GradientStop Offset="0" Color="#125FB08A"/>
+          <GradientStop Offset="1" Color="#045FB08A"/>
+        </LinearGradientBrush>
+      </Setter>
+    </Style>
+    <Style Selector="Border.card.short">
+      <Setter Property="BorderBrush" Value="#66E2776B"/>
+    </Style>
+    <Style Selector="c|Icon.chev">
+      <Setter Property="RenderTransform" Value="rotate(0deg)"/>
+    </Style>
+    <Style Selector="c|Icon.chev.open">
+      <Setter Property="RenderTransform" Value="rotate(180deg)"/>
+    </Style>
+  </UserControl.Styles>
+  <DockPanel>
+    <Grid DockPanel.Dock="Bottom" ColumnDefinitions="*,Auto" Margin="0,14,0,0">
+      <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" IsVisible="{Binding ShowEstimate}">
+        <c:Icon Kind="clock" Width="15" Height="15" Foreground="{StaticResource InkFaintText}" VerticalAlignment="Center"/>
+        <TextBlock Classes="note" Text="{Binding Estimate}" VerticalAlignment="Center"/>
+      </StackPanel>
+      <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" IsVisible="{Binding Short}">
+        <c:Icon Kind="alert" Width="16" Height="16" Foreground="{StaticResource Bad}" VerticalAlignment="Center"/>
+        <TextBlock FontSize="13" FontWeight="Medium" Foreground="{StaticResource Bad}" Text="{Binding SpaceWarning}" VerticalAlignment="Center"/>
+      </StackPanel>
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
+        <Button Content="Back" Command="{Binding BackCommand}"/>
+        <Button Classes="primary" Command="{Binding StartCommand}">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Panel VerticalAlignment="Center">
+              <c:Icon Kind="arrowUp" Width="16" Height="16" IsVisible="{Binding IsUpdate}"/>
+              <c:Icon Kind="download" Width="16" Height="16" IsVisible="{Binding !IsUpdate}"/>
+            </Panel>
+            <TextBlock Text="{Binding StartText}"/>
+          </StackPanel>
+        </Button>
+      </StackPanel>
+    </Grid>
+
+    <ScrollViewer Name="Body" VerticalScrollBarVisibility="Auto" Margin="-8,0" Padding="8,0,8,4">
+      <StackPanel>
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Classes="heading" Text="Build settings"/>
+          <TextBlock Grid.Column="1" Classes="faint" Text="Remembered from your last build" VerticalAlignment="Bottom" Margin="0,0,0,4"/>
+        </Grid>
+
+        <!-- saves: moved from another build (Windows), shared (Linux) -->
+        <StackPanel IsVisible="{Binding ShowMoveSaves}">
+          <TextBlock Classes="glabel" Text="SAVES" Margin="0,8,0,6"/>
+          <Border Classes="card" Classes.on="{Binding MoveOn}">
+            <Grid Classes="srow" ColumnDefinitions="*,Auto">
+              <StackPanel VerticalAlignment="Center" Spacing="1">
+                <TextBlock Classes="rtitle" Text="{Binding MoveTitle}"/>
+                <TextBlock Classes="rdesc" Text="{Binding MoveDesc}"/>
+              </StackPanel>
+              <ComboBox Grid.Column="1" Classes="dd" ItemsSource="{Binding SaveSources}" SelectedItem="{Binding Source}" VerticalAlignment="Center">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate x:DataType="vm:SaveSource"><TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis"/></DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+            </Grid>
+          </Border>
+        </StackPanel>
+        <StackPanel IsVisible="{Binding ShowSharedSaves}">
+          <TextBlock Classes="glabel" Text="SAVES" Margin="0,8,0,6"/>
+          <Border Classes="card">
+            <Grid Classes="srow" ColumnDefinitions="*,Auto">
+              <StackPanel VerticalAlignment="Center" Spacing="1">
+                <TextBlock Classes="rtitle" Text="Your saves come along"/>
+                <TextBlock Classes="rdesc" Text="{Binding SharedDesc}"/>
+              </StackPanel>
+              <Border Grid.Column="1" Classes="chip go" VerticalAlignment="Center">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <c:Icon Kind="check" Width="13" Height="13" VerticalAlignment="Center"/>
+                  <TextBlock Text="Shared"/>
+                </StackPanel>
+              </Border>
+            </Grid>
+          </Border>
+        </StackPanel>
+
+        <Grid ColumnDefinitions="*,*" ColumnSpacing="20">
+          <!-- upscaling -->
+          <StackPanel>
+            <TextBlock Classes="glabel" Text="UPSCALING"/>
+            <Border Classes="card">
+              <StackPanel>
+                <Grid Classes="srow" ColumnDefinitions="*,Auto">
+                  <StackPanel VerticalAlignment="Center" Spacing="1">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock Classes="rtitle" Text="NVIDIA DLSS"/>
+                      <Border Classes="chip quiet small" IsVisible="{Binding DlssYourGpu}"><TextBlock Text="Your GPU"/></Border>
+                    </StackPanel>
+                    <WrapPanel>
+                      <TextBlock Classes="rdesc" Text="For GeForce RTX cards. " TextWrapping="NoWrap"/>
+                      <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding DlssAccepted}">
+                        <c:Icon Kind="check" Width="12" Height="12" Foreground="{StaticResource Go}" VerticalAlignment="Center"/>
+                        <TextBlock FontSize="12" Foreground="{StaticResource Go}" Text="NVIDIA's licence accepted"/>
+                      </StackPanel>
+                      <TextBlock Classes="rdesc" Text="{Binding DlssLine}" TextWrapping="NoWrap" IsVisible="{Binding !DlssAccepted}"/>
+                    </WrapPanel>
+                  </StackPanel>
+                  <ToggleButton Grid.Column="1" Classes="switch" IsChecked="{Binding Dlss}" VerticalAlignment="Center"/>
+                </Grid>
+                <Border Classes="divider"/>
+                <Grid Classes="srow" ColumnDefinitions="*,Auto" IsVisible="{Binding Windows}">
+                  <StackPanel VerticalAlignment="Center" Spacing="1">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock Classes="rtitle" Text="AMD FSR 4"/>
+                      <Border Classes="chip quiet small" IsVisible="{Binding FsrYourGpu}"><TextBlock Text="Your GPU"/></Border>
+                    </StackPanel>
+                    <WrapPanel>
+                      <TextBlock Classes="rdesc" Text="For Radeon RX 9000 cards. " TextWrapping="NoWrap"/>
+                      <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding FsrAccepted}">
+                        <c:Icon Kind="check" Width="12" Height="12" Foreground="{StaticResource Go}" VerticalAlignment="Center"/>
+                        <TextBlock FontSize="12" Foreground="{StaticResource Go}" Text="AMD's licence accepted"/>
+                      </StackPanel>
+                      <TextBlock Classes="rdesc" Text="{Binding FsrLine}" TextWrapping="NoWrap" IsVisible="{Binding !FsrAccepted}"/>
+                    </WrapPanel>
+                  </StackPanel>
+                  <ToggleButton Grid.Column="1" Classes="switch" IsChecked="{Binding Fsr}" VerticalAlignment="Center"/>
+                </Grid>
+                <Grid Classes="srow" IsVisible="{Binding Linux}">
+                  <StackPanel VerticalAlignment="Center" Spacing="1">
+                    <TextBlock Classes="rtitle off" Text="AMD FSR 4"/>
+                    <TextBlock Classes="rdesc" Text="Windows only for now."/>
+                  </StackPanel>
+                </Grid>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+
+          <!-- install -->
+          <StackPanel Grid.Column="1">
+            <TextBlock Classes="glabel" Text="INSTALL"/>
+            <Border Classes="card" Classes.short="{Binding Short}">
+              <StackPanel>
+                <Grid Classes="srow" ColumnDefinitions="*,Auto">
+                  <StackPanel VerticalAlignment="Center" Spacing="1">
+                    <TextBlock Classes="rtitle" Text="Game folder"/>
+                    <TextBlock Classes="mono path" Foreground="{StaticResource InkSoft}" Text="{Binding InstallDir}" ToolTip.Tip="{Binding InstallDirFull}" Margin="0,2,0,0"/>
+                  </StackPanel>
+                  <Button Grid.Column="1" Classes="small" Content="Change…" Command="{Binding ChangeInstallCommand}" VerticalAlignment="Center"/>
+                </Grid>
+                <StackPanel Orientation="Horizontal" Spacing="12" Margin="14,0,14,12">
+                  <c:Bar Width="120" Value="{Binding MeterFraction}" Fill="{StaticResource Go}" IsVisible="{Binding !Short}" VerticalAlignment="Center"/>
+                  <c:Bar Width="120" Value="1" Fill="{StaticResource Bad}" IsVisible="{Binding Short}" VerticalAlignment="Center"/>
+                  <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <c:Icon Kind="alert" Width="14" Height="14" Foreground="{StaticResource Bad}" IsVisible="{Binding Short}" VerticalAlignment="Center"/>
+                    <TextBlock Classes="tnum" FontSize="12" Foreground="{StaticResource InkSoft}" Classes.bad="{Binding Short}" Text="{Binding MeterText}"/>
+                  </StackPanel>
+                </StackPanel>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </Grid>
+
+        <!-- the game -->
+        <TextBlock Classes="glabel" Text="THE GAME"/>
+        <Border Classes="card">
+          <Grid ColumnDefinitions="*,20,*">
+            <Border BorderBrush="{StaticResource GlassLine}" BorderThickness="0,0,1,0">
+              <Grid Classes="srow" ColumnDefinitions="*,Auto">
+                <StackPanel VerticalAlignment="Center" Spacing="1">
+                  <TextBlock Classes="rtitle" Text="Language"/>
+                  <TextBlock Classes="rdesc" Text="The game's text."/>
+                </StackPanel>
+                <ComboBox Grid.Column="1" Classes="dd" ItemsSource="{Binding LanguageChoices}" SelectedItem="{Binding Language}" VerticalAlignment="Center">
+                  <ComboBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:LanguageChoice"><TextBlock Text="{Binding Name}"/></DataTemplate>
+                  </ComboBox.ItemTemplate>
+                </ComboBox>
+              </Grid>
+            </Border>
+            <Grid Grid.Column="1" Grid.ColumnSpan="2" Classes="srow" ColumnDefinitions="*,Auto" Margin="34,8,14,8">
+              <StackPanel VerticalAlignment="Center" Spacing="1">
+                <TextBlock Classes="rtitle" Text="Prepare shaders now"/>
+                <TextBlock Classes="rdesc" Text="{Binding PrepareDesc}"/>
+              </StackPanel>
+              <ToggleButton Grid.Column="1" Classes="switch" IsChecked="{Binding Prepare}" VerticalAlignment="Center"/>
+            </Grid>
+          </Grid>
+        </Border>
+
+        <!-- advanced: closed by default -->
+        <Border Classes="card" Margin="0,12,0,0">
+          <StackPanel>
+            <Button Classes="row" Command="{Binding AdvancedCommand}">
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16" MinHeight="34" Margin="14,6">
+                <StackPanel VerticalAlignment="Center" Spacing="1">
+                  <TextBlock Classes="rtitle" Text="Advanced"/>
+                  <TextBlock Classes="rdesc" Text="{Binding AdvancedDesc}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+                <c:Icon Grid.Column="1" Classes="chev" Classes.open="{Binding AdvancedOpen}" Kind="chevron" Width="18" Height="18"
+                        Foreground="{StaticResource InkSoft}" VerticalAlignment="Center" Margin="0,0,2,0"/>
+              </Grid>
+            </Button>
+            <StackPanel IsVisible="{Binding AdvancedOpen}">
+              <Border Classes="divider"/>
+              <Grid ColumnDefinitions="*,20,*">
+                <Border BorderBrush="{StaticResource GlassLine}" BorderThickness="0,0,1,0">
+                  <Grid Classes="srow" ColumnDefinitions="*,Auto">
+                    <StackPanel VerticalAlignment="Center" Spacing="1">
+                      <TextBlock Classes="rtitle" Text="Build memory"/>
+                      <TextBlock Classes="rdesc" Text="{Binding MemoryDesc}"/>
+                    </StackPanel>
+                    <ComboBox Grid.Column="1" Classes="dd" ItemsSource="{Binding MemoryChoices}" SelectedItem="{Binding Memory}" VerticalAlignment="Center">
+                      <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:Choice"><TextBlock Text="{Binding Label}"/></DataTemplate>
+                      </ComboBox.ItemTemplate>
+                    </ComboBox>
+                  </Grid>
+                </Border>
+                <Grid Grid.Column="1" Grid.ColumnSpan="2" Classes="srow" ColumnDefinitions="*,Auto" Margin="34,8,14,8">
+                  <StackPanel VerticalAlignment="Center" Spacing="1">
+                    <TextBlock Classes="rtitle" Text="Build workers"/>
+                    <TextBlock Classes="rdesc" Text="{Binding WorkersDesc}"/>
+                  </StackPanel>
+                  <ComboBox Grid.Column="1" Classes="dd" ItemsSource="{Binding WorkerChoices}" SelectedItem="{Binding Workers}" VerticalAlignment="Center">
+                    <ComboBox.ItemTemplate>
+                      <DataTemplate x:DataType="vm:Choice"><TextBlock Text="{Binding Label}"/></DataTemplate>
+                    </ComboBox.ItemTemplate>
+                  </ComboBox>
+                </Grid>
+              </Grid>
+              <Border Classes="divider"/>
+              <Grid Classes="srow" ColumnDefinitions="*,Auto">
+                <StackPanel VerticalAlignment="Center" Spacing="1">
+                  <TextBlock Classes="rtitle" Text="Build files"/>
+                  <WrapPanel>
+                    <TextBlock Classes="mono path" Foreground="{StaticResource InkSoft}" Text="{Binding Work}" ToolTip.Tip="{Binding WorkFull}" VerticalAlignment="Center"/>
+                    <TextBlock Classes="rdesc" Text=", 45 GB while building" TextWrapping="NoWrap" VerticalAlignment="Center"/>
+                  </WrapPanel>
+                </StackPanel>
+                <Button Grid.Column="1" Classes="small" Content="Change…" Command="{Binding ChangeWorkCommand}" VerticalAlignment="Center"/>
+              </Grid>
+            </StackPanel>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+    </ScrollViewer>
+  </DockPanel>
+</UserControl>

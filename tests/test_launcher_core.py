@@ -49,8 +49,22 @@ def check_languages():
         raise SystemExit("launcher/Core/Languages.cs differs from make_game.py's LANGUAGES:\n%s\n%s" % (have, want))
 
 
+def check_licences():
+    """The DLSS and FSR 4 licences the launcher shows before a build fetches the SDKs link the commits scripts/ngx_sdk.py and
+    scripts/ffx_sdk.py fetch (CONTRIBUTING.md: a change to the pinned release changes the licence text the player accepts)"""
+    source = (ROOT / "launcher" / "App" / "ViewModels" / "SettingsStepViewModel.cs").read_text(encoding="utf-8")
+    for script in ("ngx_sdk.py", "ffx_sdk.py"):
+        tree = ast.parse((ROOT / "scripts" / script).read_text(encoding="utf-8"))
+        commit = next(ast.literal_eval(n.value) for n in tree.body if isinstance(n, ast.Assign) and len(n.targets) == 1
+                      and isinstance(n.targets[0], ast.Name) and n.targets[0].id == "COMMIT")
+        if commit not in source:
+            raise SystemExit("launcher/App/ViewModels/SettingsStepViewModel.cs's licence text does not name scripts/%s's COMMIT %s"
+                             % (script, commit))
+
+
 def main():
     check_languages()
+    check_licences()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dotnet", default=None)
     parser.add_argument("--strict", action="store_true")

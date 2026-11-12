@@ -1,0 +1,84 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:HookshotLauncher.ViewModels"
+             xmlns:c="using:HookshotLauncher.Controls"
+             x:Class="HookshotLauncher.Views.BuildStepView"
+             x:DataType="vm:BuildStepViewModel">
+  <UserControl.Styles>
+    <Style Selector="TextBlock.sname">
+      <Setter Property="Foreground" Value="{StaticResource InkSoft}"/>
+    </Style>
+    <Style Selector="TextBlock.sname.wait">
+      <Setter Property="Foreground" Value="{StaticResource InkFaintText}"/>
+    </Style>
+    <Style Selector="TextBlock.sname.done">
+      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+    </Style>
+    <Style Selector="TextBlock.sname.run">
+      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+  </UserControl.Styles>
+  <DockPanel>
+    <Grid DockPanel.Dock="Bottom" ColumnDefinitions="*,Auto" Margin="0,14,0,0">
+      <Button Classes="link soft" Content="{Binding LogButton}" Command="{Binding ToggleLogCommand}"/>
+      <Button Grid.Column="1" Content="Cancel" Command="{Binding CancelCommand}"/>
+    </Grid>
+    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" ColumnSpacing="24">
+      <StackPanel VerticalAlignment="Bottom">
+        <TextBlock Classes="heading" Text="{Binding Title}"/>
+        <TextBlock Classes="sub" Text="You can keep using your PC. Closing the launcher stops the build."/>
+      </StackPanel>
+      <StackPanel Grid.Column="1" VerticalAlignment="Bottom">
+        <TextBlock Classes="tnum" Text="{Binding Percent}" FontSize="40" FontWeight="Bold" LetterSpacing="-0.8" HorizontalAlignment="Right" LineHeight="44"/>
+        <TextBlock Classes="note tnum" Text="{Binding Left}" HorizontalAlignment="Right" Margin="0,6,0,0"/>
+      </StackPanel>
+    </Grid>
+    <c:Bar DockPanel.Dock="Top" Height="10" Margin="0,18,0,16" Value="{Binding Overall}" Notches="{Binding Notches}">
+      <c:Bar.Fill>
+        <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+          <GradientStop Offset="0" Color="#3D63E6"/>
+          <GradientStop Offset="1" Color="#4B70F0"/>
+        </LinearGradientBrush>
+      </c:Bar.Fill>
+    </c:Bar>
+    <Panel>
+      <Border Classes="card" IsVisible="{Binding ShowStages}" VerticalAlignment="Top" Padding="18,4">
+        <ItemsControl ItemsSource="{Binding Rows}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:StageRowViewModel">
+              <Border BorderBrush="{StaticResource GlassLine}" BorderThickness="0,0,0,1" Margin="0,0,0,-1">
+                <Grid ColumnDefinitions="22,170,*,Auto" ColumnSpacing="12" Height="41">
+                  <Panel VerticalAlignment="Center">
+                    <Border Width="22" Height="22" CornerRadius="11" Background="{StaticResource GoSoft}" IsVisible="{Binding IsDone}">
+                      <c:Icon Kind="check" Width="13" Height="13" Foreground="{StaticResource Go}"/>
+                    </Border>
+                    <Border Width="22" Height="22" CornerRadius="11" Background="{StaticResource BadSoft}" IsVisible="{Binding IsFail}">
+                      <c:Icon Kind="alert" Width="13" Height="13" Foreground="{StaticResource Bad}"/>
+                    </Border>
+                    <c:Spinner IsVisible="{Binding IsRun}"/>
+                    <Ellipse Width="14" Height="14" Stroke="{StaticResource InkFaint}" StrokeThickness="1.5" IsVisible="{Binding IsWait}"/>
+                    <c:Icon Kind="dash" Width="13" Height="13" Foreground="{StaticResource InkFaint}" IsVisible="{Binding IsSkip}"/>
+                  </Panel>
+                  <TextBlock Grid.Column="1" Classes="sname" Classes.wait="{Binding IsWait}" Classes.done="{Binding IsDone}" Classes.run="{Binding IsRun}"
+                             Text="{Binding Name}" VerticalAlignment="Center"/>
+                  <TextBlock Grid.Column="2" Classes="note tnum" Text="{Binding Detail}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                  <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Classes="tnum" FontSize="13" Text="{Binding Time}"/>
+                    <TextBlock Classes="tnum" FontSize="13" Foreground="{StaticResource InkFaintText}" Text="{Binding TimeFaint}"/>
+                  </StackPanel>
+                </Grid>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </Border>
+      <Border IsVisible="{Binding ShowLog}" CornerRadius="10" BorderBrush="{StaticResource GlassLine}" BorderThickness="1" Background="#33000000">
+        <ScrollViewer Name="LogScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Padding="12,10">
+          <SelectableTextBlock Text="{Binding LogText}" FontFamily="{StaticResource Mono}" FontSize="11" LineHeight="17.6"
+                               Foreground="{StaticResource InkSoft}"/>
+        </ScrollViewer>
+      </Border>
+    </Panel>
+  </DockPanel>
+</UserControl>

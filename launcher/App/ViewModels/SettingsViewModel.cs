@@ -2,146 +2,163 @@ using HookshotLauncher.Core;
 
 namespace HookshotLauncher.ViewModels;
 
-public sealed record Choice(int? Value, string Label);
-
-public sealed record LanguageChoice(string Code, string Name);
-
-/// The settings the wizard remembers (LauncherSettings), saved when the page is left
+/// The launcher's settings: the channel new builds start on, where builds go, the build files, the update check. Each version
+/// keeps its own build settings (step 2)
 public sealed class SettingsViewModel : ViewModelBase
 {
-    LauncherSettings s = new();
+    readonly LauncherSettings s;
+    long? workBytes;
+
+    public sealed class ChannelOption(SettingsViewModel owner, string id, string name, string about, string? version) : ViewModelBase
+    {
+        public string Id => id;
+        public string Name => name;
+        public string About => about;
+        public string Version => version == null ? "Not checked yet" : Versions.Shown(version);
+
+        public bool IsPicked
+        {
+            get => owner.Channel == id;
+            set
+            {
+                if (value) owner.Channel = id;
+            }
+        }
+
+        public void Changed() => Raise(nameof(IsPicked));
+    }
 
     public SettingsViewModel(MainViewModel main)
     {
         Main = main;
-        BackCommand = new Command(Save);
-        var totalGb = (int)Math.Round(GC.GetGCMemoryInfo().TotalAvailableMemoryBytes / (double)(1L << 30));
-        // (BuildMemory.Choices and BuildWorkers.Choices of the 2.x Builder: Automatic, then every 4 GB, every CPU thread)
-        MemoryChoices = new[] { new Choice(null, "Automatic") }
-            .Concat(Enumerable.Range(1, Math.Max(1, (totalGb + 3) / 4)).Select(i => new Choice(i * 4, $"{i * 4} GB"))).ToList();
-        WorkerChoices = new[] { new Choice(null, "Automatic") }
-            .Concat(Enumerable.Range(1, Math.Max(1, Environment.ProcessorCount)).Select(i => new Choice(i, i.ToString()))).ToList();
-        LanguageChoices = Languages.All.Select(l => new LanguageChoice(l.Code, l.Name)).ToList();
+        s = main.Service.Settings;
+        Channels = ChannelPickerViewModel.All.Select(c => new ChannelOption(this, c.Id, c.Name, c.About, main.Service.NewestOf(c.Id))).ToList();
+        DoneCommand = new Command(Done);
+        ChangeBuildsCommand = new Command(() => _ = ChangeBuildsAsync());
+        ChangeWorkCommand = new Command(() => _ = ChangeWorkAsync());
+        DefaultWorkCommand = new Command(() => { s.Work = null; Save(); RaiseAll(nameof(Work)); MeasureWork(); });
+        FreeSpaceCommand = new Command(FreeSpace, () => workBytes > 0);
+        ReleaseNotesCommand = new Command(() => Main.Host?.Open(Releases.Repo + "/releases"));
+        MeasureWork();
     }
 
     public MainViewModel Main { get; }
-    public IReadOnlyList<Choice> MemoryChoices { get; }
-    public IReadOnlyList<Choice> WorkerChoices { get; }
-    public IReadOnlyList<LanguageChoice> LanguageChoices { get; }
-    public Command BackCommand { get; }
-
-    public void Load()
-    {
-        s = Main.Service.Settings;
-        foreach (var n in new[] { nameof(Dlss), nameof(DlssLicense), nameof(Fsr), nameof(FsrLicense), nameof(PrepareShaders), nameof(MoveSaves),
-                                  nameof(Memory), nameof(Workers), nameof(Language), nameof(FsrAvailable), nameof(MoveSavesNote) })
-            Raise(n);
-    }
+    public IReadOnlyList<ChannelOption> Channels { get; }
 
     void Save()
     {
-        Main.Service.SaveSettings();
+        try { Main.Service.SaveSettings(); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException) { Main.ShowToast("The settings could not be saved: " + e.Message); }
+    }
+
+    public string Channel
+    {
+        get => s.DefaultChannel;
+        set
+        {
+            if (value == s.DefaultChannel || !Versions.IsChannel(value)) return;
+            s.DefaultChannel = value;
+            Save();
+            foreach (var c in Channels) c.Changed();
+            Raise(nameof(ChannelHint));
+        }
+    }
+
+    public string ChannelHint => (ChannelPickerViewModel.All.FirstOrDefault(c => c.Id == s.DefaultChannel).About ?? "") + " Builds you have keep their own channel.";
+
+    public string BuildsFolder
+    {
+        get => ShownPath.Of(Main.Service.BuildsFolder);
+        set
+        {
+            s.BuildsFolder = string.IsNullOrWhiteSpace(value) ? null : ShownPath.Typed(value.Trim());
+            Save();
+            Raise();
+        }
+    }
+
+    public string Work
+    {
+        get => ShownPath.Of(Main.Service.Work);
+        set
+        {
+            s.Work = string.IsNullOrWhiteSpace(value) ? null : ShownPath.Typed(value.Trim());
+            Save();
+            Raise();
+            MeasureWork();
+        }
+    }
+
+    public string WorkNote => workBytes is long b && b > 0 ? $"{Durations.Size(b)} kept to make updates quicker." : "Nothing kept yet.";
+
+    public bool CheckUpdates
+    {
+        get => s.CheckUpdates;
+        set
+        {
+            s.CheckUpdates = value;
+            Save();
+            Raise();
+        }
+    }
+
+    public string Version => "Hookshot Launcher " + (typeof(SettingsViewModel).Assembly.GetName().Version?.ToString(3) ?? "3.0.0");
+
+    public Command DoneCommand { get; }
+    public Command ChangeBuildsCommand { get; }
+    public Command ChangeWorkCommand { get; }
+    public Command DefaultWorkCommand { get; }
+    public Command FreeSpaceCommand { get; }
+    public Command ReleaseNotesCommand { get; }
+
+    void MeasureWork()
+    {
+        var folder = Main.Service.Work;
+        Task.Run(() =>
+        {
+            var bytes = Disk.WorkBytes(folder);
+            Ui.Post(() =>
+            {
+                workBytes = bytes;
+                Raise(nameof(WorkNote));
+                FreeSpaceCommand.Changed();
+            });
+        });
+    }
+
+    /// The build files deleted: the next build or update makes them again. Only what make_game made there (Disk.WorkParts): the
+    /// folder may be one the player chose, holding other things
+    void FreeSpace()
+    {
+        var folder = Main.Service.Work;
+        var freed = workBytes ?? 0;
+        try
+        {
+            Disk.FreeWork(folder);
+            Main.ShowToast($"Freed {Durations.Size(freed)} of build files. The next update makes them again.");
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            Main.ShowToast("The build files could not all be deleted: " + e.Message);
+        }
+        MeasureWork();
+    }
+
+    async Task ChangeBuildsAsync()
+    {
+        if (Main.Host is not { } host) return;
+        if (await host.PickFolderAsync("Where builds go", Main.Service.BuildsFolder) is { } picked) BuildsFolder = Path.GetFullPath(picked);
+    }
+
+    async Task ChangeWorkAsync()
+    {
+        if (Main.Host is not { } host) return;
+        if (await host.PickFolderAsync("Where the build files go", Main.Service.Work) is { } picked) Work = Path.GetFullPath(picked);
+    }
+
+    void Done()
+    {
+        Save();
         Main.ShowHome();
-    }
-
-    public bool Dlss
-    {
-        get => s.Dlss;
-        set
-        {
-            s.Dlss = value;   // (kept only with NVIDIA's license accepted: LauncherSettings.Save)
-            Raise();
-        }
-    }
-
-    public bool DlssLicense
-    {
-        get => s.DlssLicense;
-        set
-        {
-            s.DlssLicense = value;
-            if (!value) s.Dlss = false;
-            Raise();
-            Raise(nameof(Dlss));
-        }
-    }
-
-    public bool Fsr
-    {
-        get => s.Fsr;
-        set
-        {
-            s.Fsr = value;
-            Raise();
-        }
-    }
-
-    public bool FsrLicense
-    {
-        get => s.FsrLicense;
-        set
-        {
-            s.FsrLicense = value;
-            if (!value) s.Fsr = false;
-            Raise();
-            Raise(nameof(Fsr));
-        }
-    }
-
-    /// AMD FSR 4 is built on Windows only (the AppImage's Vulkan back end has none)
-    public bool FsrAvailable => Main.Service.Platform == Platform.Windows;
-
-    public bool PrepareShaders
-    {
-        get => s.PrepareShaders;
-        set
-        {
-            s.PrepareShaders = value;
-            Raise();
-        }
-    }
-
-    public bool MoveSaves
-    {
-        get => s.MoveSaves;
-        set
-        {
-            s.MoveSaves = value;
-            Raise();
-        }
-    }
-
-    public string MoveSavesNote => Main.Service.Platform == Platform.Windows
-        ? "Each game folder keeps its own saves on Windows: a new build, or an update, starts from the saves of the build you choose."
-        : "On Linux every build already uses the same saves.";
-
-    public Choice Memory
-    {
-        get => MemoryChoices.FirstOrDefault(c => c.Value == s.MemoryGb) ?? MemoryChoices[0];
-        set
-        {
-            s.MemoryGb = value?.Value;
-            Raise();
-        }
-    }
-
-    public Choice Workers
-    {
-        get => WorkerChoices.FirstOrDefault(c => c.Value == s.BuildWorkers) ?? WorkerChoices[0];
-        set
-        {
-            s.BuildWorkers = value?.Value;
-            Raise();
-        }
-    }
-
-    public LanguageChoice Language
-    {
-        get => LanguageChoices.FirstOrDefault(l => l.Code == Languages.Normalize(s.Language)) ?? LanguageChoices[0];
-        set
-        {
-            s.Language = value?.Code;
-            Raise();
-        }
     }
 }

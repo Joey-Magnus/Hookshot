@@ -1,0 +1,30 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:HookshotLauncher.ViewModels"
+             xmlns:c="using:HookshotLauncher.Controls"
+             x:Class="HookshotLauncher.Views.SavesResultView"
+             x:DataType="vm:SavesResultViewModel">
+  <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+    <Border Width="84" Height="84" CornerRadius="42" Background="{StaticResource GoSoft}" HorizontalAlignment="Center" IsVisible="{Binding Done}"
+            BoxShadow="0 0 60 0 #8C5FB08A, 0 0 0 10 #125FB08A">
+      <c:Icon Kind="check" Width="36" Height="36" Foreground="{StaticResource Go}"/>
+    </Border>
+    <Border Width="84" Height="84" CornerRadius="42" Background="{StaticResource WarnSoft}" HorizontalAlignment="Center" IsVisible="{Binding Refused}"
+            BoxShadow="0 0 60 0 #4DE2B86B, 0 0 0 10 #12E2B86B">
+      <c:Icon Kind="alert" Width="36" Height="36" Foreground="{StaticResource Warn}"/>
+    </Border>
+    <TextBlock Classes="heading" Text="{Binding Heading}" HorizontalAlignment="Center" Margin="0,26,0,0"/>
+    <TextBlock Classes="sub" Text="{Binding Sub}" TextAlignment="Center" HorizontalAlignment="Center" MaxWidth="560"/>
+    <TextBlock Classes="faint" Text="{Binding Faint}" HorizontalAlignment="Center" Margin="0,8,0,0"/>
+    <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Center" Margin="0,28,0,0" IsVisible="{Binding Done}">
+      <Button Command="{Binding BackupCommand}" IsVisible="{Binding HasBackup}">
+        <StackPanel Orientation="Horizontal" Spacing="8"><c:Icon Kind="folder" Width="16" Height="16"/><TextBlock Text="Open backup folder"/></StackPanel>
+      </Button>
+      <Button Classes="primary" Content="Back to saves" Command="{Binding BackCommand}"/>
+    </StackPanel>
+    <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Center" Margin="0,28,0,0" IsVisible="{Binding Refused}">
+      <Button Content="Back to saves" Command="{Binding BackCommand}"/>
+      <Button Classes="primary" Content="Try again" Command="{Binding RetryCommand}"/>
+    </StackPanel>
+  </StackPanel>
+</UserControl>

@@ -1,0 +1,62 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:HookshotLauncher.ViewModels"
+             x:Class="HookshotLauncher.Views.SavePickView"
+             x:DataType="vm:SavePickViewModel">
+  <Border Classes="dialog wide" MaxHeight="560">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+      <StackPanel>
+        <TextBlock Classes="modaltitle" Text="{Binding Title}"/>
+        <TextBlock Classes="sub" Text="{Binding Sub}"/>
+        <ItemsControl ItemsSource="{Binding Options}" Margin="0,14,0,0">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate><StackPanel Spacing="6"/></ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:SavePickViewModel+Option">
+              <RadioButton Classes="chan compact" GroupName="source" IsChecked="{Binding IsPicked}" IsEnabled="{Binding Enabled}">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="14">
+                  <StackPanel Spacing="2">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock Classes="channame" Classes.dim="{Binding Dim}" Text="{Binding Name}" VerticalAlignment="Center"/>
+                      <Border Classes="tag" Classes.rc="{Binding IsCandidate}" Classes.nightly="{Binding IsNightly}" IsVisible="{Binding HasChannel}">
+                        <TextBlock Text="{Binding Channel}"/>
+                      </Border>
+                      <Border Classes="chip warn small" IsVisible="{Binding Waiting}"><TextBlock Text="Save waiting"/></Border>
+                    </StackPanel>
+                    <TextBlock Classes="chanabout" Classes.dim="{Binding Dim}" FontSize="11.5" Text="{Binding About}" IsVisible="{Binding HasAbout}"
+                               TextTrimming="CharacterEllipsis"/>
+                  </StackPanel>
+                  <TextBlock Grid.Column="1" FontSize="13" Text="{Binding Right}" VerticalAlignment="Center"/>
+                </Grid>
+              </RadioButton>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <StackPanel IsVisible="{Binding HasProfiles}">
+          <TextBlock Classes="label" Text="PROFILE" Margin="0,16,0,0"/>
+          <TextBlock Classes="hint" Text="{Binding ProfileHint}" Margin="0,2,0,0"/>
+          <ItemsControl ItemsSource="{Binding Profiles}" Margin="0,14,0,0">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate><StackPanel Spacing="6"/></ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:SavePickViewModel+ProfileOption">
+                <RadioButton Classes="chan compact" GroupName="profile" IsChecked="{Binding IsPicked}">
+                  <Grid ColumnDefinitions="*,Auto" ColumnSpacing="14">
+                    <TextBlock Classes="channame" Text="{Binding Name}"/>
+                    <TextBlock Grid.Column="1" FontSize="13" Text="{Binding Summary}"/>
+                  </Grid>
+                </RadioButton>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+        <StackPanel Classes="buttons" Margin="0,16,0,0">
+          <Button Content="Cancel" Command="{Binding CancelCommand}"/>
+          <Button Classes="primary" Content="Continue" Command="{Binding GoCommand}"/>
+        </StackPanel>
+      </StackPanel>
+    </ScrollViewer>
+  </Border>
+</UserControl>

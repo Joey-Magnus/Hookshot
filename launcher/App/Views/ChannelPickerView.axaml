@@ -1,0 +1,44 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:HookshotLauncher.ViewModels"
+             x:Class="HookshotLauncher.Views.ChannelPickerView"
+             x:DataType="vm:ChannelPickerViewModel">
+  <Border Classes="dialog wide">
+    <StackPanel>
+      <TextBlock Classes="modaltitle" Text="Which version?"/>
+      <TextBlock Classes="sub" Text="Each version you build follows its channel, and offers that channel's updates."/>
+      <ItemsControl ItemsSource="{Binding Rows}" Margin="0,16,0,0">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate><StackPanel Spacing="8"/></ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="vm:ChannelPickerViewModel+Row">
+            <RadioButton Classes="chan" GroupName="channel" IsChecked="{Binding IsPicked}" IsEnabled="{Binding Known}">
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="14">
+                <StackPanel Spacing="2">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Classes="channame" Text="{Binding Name}" VerticalAlignment="Center"/>
+                    <Border Classes="tag" Classes.rc="{Binding IsCandidate}" Classes.nightly="{Binding IsNightly}">
+                      <TextBlock Text="{Binding Tag}"/>
+                    </Border>
+                  </StackPanel>
+                  <TextBlock Classes="chanabout" Text="{Binding About}"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center">
+                  <TextBlock FontSize="13" Text="{Binding Version}" HorizontalAlignment="Right"/>
+                  <TextBlock FontSize="12" Foreground="{StaticResource Go}" Text="You have it" IsVisible="{Binding Have}" HorizontalAlignment="Right"/>
+                </StackPanel>
+              </Grid>
+            </RadioButton>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+      <TextBlock Classes="hint" Margin="0,12,0,0" IsVisible="{Binding Again}"
+                 Text="Building it again replaces that build, with the settings you choose next. Your saves stay."/>
+      <StackPanel Classes="buttons">
+        <Button Content="Cancel" Command="{Binding CancelCommand}"/>
+        <Button Classes="primary" Content="{Binding GoText}" Command="{Binding GoCommand}"/>
+      </StackPanel>
+    </StackPanel>
+  </Border>
+</UserControl>

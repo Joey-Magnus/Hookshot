@@ -1,0 +1,86 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:HookshotLauncher.ViewModels"
+             xmlns:c="using:HookshotLauncher.Controls"
+             x:Class="HookshotLauncher.Views.SavesConfirmView"
+             x:DataType="vm:SavesConfirmViewModel">
+  <UserControl.Styles>
+    <Style Selector="TextBlock.sidelabel">
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="Foreground" Value="{StaticResource InkFaintText}"/>
+      <Setter Property="LetterSpacing" Value="0.48"/>
+    </Style>
+  </UserControl.Styles>
+  <UserControl.DataTemplates>
+    <DataTemplate x:DataType="vm:SlotViewModel">
+      <Grid ColumnDefinitions="20,*,Auto" ColumnSpacing="8" Margin="0,6">
+        <Border Width="20" Height="20" CornerRadius="10" Background="{StaticResource SoftNum}">
+          <TextBlock Text="{Binding Number}" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource InkSoft}"
+                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        </Border>
+        <TextBlock Grid.Column="1" FontSize="13" Text="{Binding Name}" VerticalAlignment="Center"/>
+        <TextBlock Grid.Column="2" Classes="faint tnum" Text="{Binding Saved}" VerticalAlignment="Center"/>
+      </Grid>
+    </DataTemplate>
+  </UserControl.DataTemplates>
+  <DockPanel>
+    <Grid DockPanel.Dock="Bottom" ColumnDefinitions="*,Auto" Margin="0,14,0,0">
+      <TextBlock Classes="faint" Text="{Binding CloseFirst}" VerticalAlignment="Center"/>
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10">
+        <Button Content="Back" Command="{Binding BackCommand}"/>
+        <Button Classes="primary" Content="{Binding Verb}" Command="{Binding RunCommand}"/>
+      </StackPanel>
+    </Grid>
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="-8,0" Padding="8,0,8,4">
+      <StackPanel>
+        <TextBlock Classes="heading" Text="{Binding Title}" TextTrimming="CharacterEllipsis"/>
+        <TextBlock Classes="sub" Text="{Binding Sub}"/>
+        <Grid ColumnDefinitions="*,32,*" ColumnSpacing="8" Margin="0,18,0,0">
+          <Border Classes="card" Padding="16,12,16,8">
+            <StackPanel>
+              <TextBlock Classes="sidelabel" Text="FROM"/>
+              <TextBlock Text="{Binding From.Name}" FontWeight="SemiBold" Margin="0,2,0,0"/>
+              <TextBlock Classes="faint" Text="{Binding FromWhere}" TextTrimming="CharacterEllipsis" Margin="0,0,0,4"/>
+              <TextBlock Classes="note" Text="No saves" IsVisible="{Binding FromEmpty}" Margin="0,8"/>
+              <ItemsControl ItemsSource="{Binding FromSlots}"/>
+            </StackPanel>
+          </Border>
+          <c:Icon Grid.Column="1" Kind="arrowRight" Foreground="{StaticResource InkFaintText}" VerticalAlignment="Center"/>
+          <Border Grid.Column="2" Classes="card" Padding="16,12,16,8" BorderBrush="#40E2776B">
+            <StackPanel>
+              <TextBlock Classes="sidelabel" Text="TO"/>
+              <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,2,0,0">
+                <TextBlock Text="{Binding To.Name}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                <Border Classes="chip bad small"><TextBlock Text="Replaced"/></Border>
+              </StackPanel>
+              <TextBlock Classes="faint" Text="{Binding ToWhere}" TextTrimming="CharacterEllipsis" Margin="0,0,0,4"/>
+              <TextBlock Classes="note" Text="No saves" IsVisible="{Binding ToEmpty}" Margin="0,8"/>
+              <ItemsControl ItemsSource="{Binding ToSlots}"/>
+            </StackPanel>
+          </Border>
+        </Grid>
+        <Border Classes="warnbox" Margin="0,14,0,0">
+          <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+            <Border Width="18" Height="18" CornerRadius="9" Background="#33E2B86B" VerticalAlignment="Top" Margin="0,1,0,0">
+              <c:Icon Kind="alert" Width="18" Height="18" Foreground="{StaticResource Warn}"/>
+            </Border>
+            <TextBlock Grid.Column="1" Text="{Binding Replaced}" TextWrapping="Wrap"/>
+          </Grid>
+        </Border>
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="24" Margin="0,14,0,0">
+          <CheckBox Classes="tick" IsChecked="{Binding KeepSettings}" VerticalAlignment="Top">
+            <StackPanel Spacing="2">
+              <TextBlock FontSize="13" FontWeight="Medium" Text="{Binding KeepLabel}"/>
+              <TextBlock FontSize="12" Foreground="{StaticResource InkFaintText}" Text="Camera, text speed and the game's other options stay as they are there."/>
+            </StackPanel>
+          </CheckBox>
+          <Grid Grid.Column="1" ColumnDefinitions="Auto,*" ColumnSpacing="8" MaxWidth="380">
+            <c:Icon Kind="folder" Width="15" Height="15" Foreground="{StaticResource InkFaintText}" VerticalAlignment="Top"/>
+            <TextBlock Grid.Column="1" FontSize="12" Foreground="{StaticResource InkSoft}" Text="{Binding BackupLine}" TextWrapping="Wrap"/>
+          </Grid>
+        </Grid>
+      </StackPanel>
+    </ScrollViewer>
+  </DockPanel>
+</UserControl>

@@ -16,7 +16,9 @@ static class Program
         return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }
 
-    public static AppBuilder BuildAvaloniaApp() => AppBuilder.Configure<App>().UsePlatformDetect().LogToTrace();
+    public static AppBuilder BuildAvaloniaApp() => AppBuilder.Configure<App>().UsePlatformDetect()
+        .UseWaylandWithFallback()   // (native Wayland when there is a compositor: through XWayland, a scaled desktop draws the window blurry)
+        .LogToTrace();
 
     /// --play [folder]: that build's game, else the default build's, with no window (the hand-over is read first, as at any start)
     static int PlayWithoutWindow(StartRequest start)

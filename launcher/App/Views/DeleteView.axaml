@@ -1,0 +1,34 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:HookshotLauncher.ViewModels"
+             xmlns:c="using:HookshotLauncher.Controls"
+             x:Class="HookshotLauncher.Views.DeleteView"
+             x:DataType="vm:DeleteViewModel">
+  <Border Classes="dialog">
+    <StackPanel>
+      <TextBlock Classes="modaltitle" Text="{Binding Title}"/>
+      <TextBlock Classes="sub" Text="{Binding Sub}"/>
+      <Border Margin="0,10,0,0" Padding="12,9" CornerRadius="8" Background="#26000000" BorderBrush="{StaticResource GlassLine}" BorderThickness="1">
+        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+          <c:Icon Kind="folder" Width="15" Height="15" Foreground="{StaticResource InkFaintText}" VerticalAlignment="Center"/>
+          <TextBlock Grid.Column="1" Classes="mono path" Foreground="{StaticResource InkSoft}" Text="{Binding Folder}" ToolTip.Tip="{Binding FolderFull}"
+                     VerticalAlignment="Center"/>
+        </Grid>
+      </Border>
+      <Border Classes="warnbox" IsVisible="{Binding Windows}">
+        <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+          <Border Width="18" Height="18" CornerRadius="9" Background="#33E2B86B" VerticalAlignment="Top" Margin="0,1,0,0">
+            <c:Icon Kind="alert" Width="18" Height="18" Foreground="{StaticResource Warn}"/>
+          </Border>
+          <TextBlock Grid.Column="1" Text="{Binding SavesWarning}" TextWrapping="Wrap"/>
+        </Grid>
+      </Border>
+      <TextBlock Classes="hint" Margin="0,12,0,0" IsVisible="{Binding Linux}" Text="Your saves stay: on Linux they are shared by every build."/>
+      <TextBlock Classes="hint" Margin="0,12,0,0" IsVisible="{Binding DefaultNote}" Text="{Binding DefaultText}"/>
+      <StackPanel Classes="buttons">
+        <Button Content="Keep it" Command="{Binding KeepCommand}"/>
+        <Button Classes="bad" Content="Delete" Command="{Binding DeleteCommand}"/>
+      </StackPanel>
+    </StackPanel>
+  </Border>
+</UserControl>

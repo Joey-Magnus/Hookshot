@@ -1,10 +1,12 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:c="using:HookshotLauncher.Controls"
              x:Class="HookshotLauncher.App"
              RequestedThemeVariant="Dark">
+  <!-- The launcher in the 2.x Builder's "Slate, frosted" look: the mockup's tokens.css (launcher/mockup), under App.xaml's names -->
   <Application.Resources>
     <ResourceDictionary>
-      <!-- Slate, frosted: builder/HookshotBuilder/App.xaml's palette, by the same names -->
+      <!-- the palette (builder/HookshotBuilder/App.xaml) -->
       <SolidColorBrush x:Key="Page" Color="#14161A"/>
       <SolidColorBrush x:Key="Raised" Color="#1C1F24"/>
       <SolidColorBrush x:Key="RaisedHover" Color="#23272D"/>
@@ -30,7 +32,42 @@
       <SolidColorBrush x:Key="BadSoft" Color="#26E2776B"/>
       <SolidColorBrush x:Key="WarnSoft" Color="#1FE2B86B"/>
       <SolidColorBrush x:Key="BrandSoft" Color="#333D63E6"/>
+      <!-- small text that must be read (InkFaint is for disabled text and decoration only) -->
+      <SolidColorBrush x:Key="InkFaintText" Color="#8A919B"/>
+      <!-- the literals App.xaml uses inline -->
+      <SolidColorBrush x:Key="ChipFill" Color="#0DFFFFFF"/>
+      <SolidColorBrush x:Key="ChipLine" Color="#14FFFFFF"/>
+      <SolidColorBrush x:Key="QuietFill" Color="#08FFFFFF"/>
+      <SolidColorBrush x:Key="QuietLine" Color="#1FFFFFFF"/>
+      <SolidColorBrush x:Key="PrimaryLine" Color="#33FFFFFF"/>
+      <SolidColorBrush x:Key="GoLine" Color="#40FFFFFF"/>
+      <SolidColorBrush x:Key="RowHover" Color="#08FFFFFF"/>
+      <SolidColorBrush x:Key="TickLine" Color="#40FFFFFF"/>
+      <SolidColorBrush x:Key="BarTrack" Color="#12FFFFFF"/>
+      <SolidColorBrush x:Key="DisabledFill" Color="#14FFFFFF"/>
+      <SolidColorBrush x:Key="CaptionInk" Color="#80FFFFFF"/>
+      <SolidColorBrush x:Key="InfoInk" Color="#B9C8FF"/>
+      <SolidColorBrush x:Key="Selected" Color="#143D63E6"/>
+      <SolidColorBrush x:Key="SoftNum" Color="#0FFFFFFF"/>
+      <!-- pressed: a step darker than hover -->
+      <SolidColorBrush x:Key="QuietPressed" Color="#05FFFFFF"/>
+      <SolidColorBrush x:Key="BrandPressed" Color="#3357D0"/>
+      <SolidColorBrush x:Key="GoPressed" Color="#539C7A"/>
+      <SolidColorBrush x:Key="BadHover" Color="#EC8B80"/>
+      <SolidColorBrush x:Key="BadPressed" Color="#D2685C"/>
+      <!-- Windows' own close red -->
+      <SolidColorBrush x:Key="CloseHover" Color="#C42B1C"/>
+      <SolidColorBrush x:Key="ClosePressed" Color="#A8261A"/>
+      <!-- the keyboard / controller focus ring: a light brand ring (8:1 on the page), 2 px clear of the control -->
+      <SolidColorBrush x:Key="FocusRing" Color="#93AAFF"/>
+      <BoxShadows x:Key="PrimaryGlow">0 6 22 0 #8C3D63E6</BoxShadows>
+      <BoxShadows x:Key="GoGlow">0 8 30 0 #805FB08A</BoxShadows>
+      <!-- digits all one width, so versions, sizes, times and percentages do not jitter as they change -->
+      <FontFeatureCollection x:Key="Tabular">
+        <FontFeature>+tnum</FontFeature>
+      </FontFeatureCollection>
       <FontFamily x:Key="Ui">avares://HookshotLauncher/Assets/Fonts#Inter</FontFamily>
+      <FontFamily x:Key="Mono">Cascadia Mono, Consolas, JetBrains Mono, DejaVu Sans Mono, monospace</FontFamily>
     </ResourceDictionary>
   </Application.Resources>
 
@@ -39,28 +76,70 @@
 
     <Style Selector="Window">
       <Setter Property="FontFamily" Value="{StaticResource Ui}"/>
-      <Setter Property="Background" Value="{StaticResource Page}"/>
+      <Setter Property="FontSize" Value="14"/>
       <Setter Property="Foreground" Value="{StaticResource Ink}"/>
     </Style>
-    <Style Selector="TextBlock">
-      <Setter Property="FontSize" Value="14"/>
-    </Style>
+
+    <!-- type, one scale: 11 (small chips), 12 (faint, labels), 13 (notes), 14 (body), 16, 18 (dialog titles), 24 (headings),
+         34 (the game's name), 40 (a build's percentage); weights Medium, SemiBold, Bold -->
     <Style Selector="TextBlock.heading">
       <Setter Property="FontSize" Value="24"/>
       <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="LetterSpacing" Value="-0.24"/>
+    </Style>
+    <Style Selector="TextBlock.title">
+      <Setter Property="FontSize" Value="34"/>
+      <Setter Property="FontWeight" Value="Bold"/>
+      <Setter Property="LetterSpacing" Value="-0.5"/>
     </Style>
     <Style Selector="TextBlock.sub">
       <Setter Property="Foreground" Value="{StaticResource InkSoft}"/>
       <Setter Property="TextWrapping" Value="Wrap"/>
+      <Setter Property="Margin" Value="0,6,0,0"/>
     </Style>
-    <Style Selector="TextBlock.faint">
-      <Setter Property="Foreground" Value="{StaticResource InkFaint}"/>
+    <Style Selector="TextBlock.note">
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Foreground" Value="{StaticResource InkSoft}"/>
+    </Style>
+    <Style Selector="TextBlock.faint, TextBlock.hint">
       <Setter Property="FontSize" Value="12"/>
+      <Setter Property="Foreground" Value="{StaticResource InkFaintText}"/>
+    </Style>
+    <Style Selector="TextBlock.hint">
+      <Setter Property="TextWrapping" Value="Wrap"/>
+      <Setter Property="Margin" Value="0,6,0,0"/>
     </Style>
     <Style Selector="TextBlock.label">
       <Setter Property="FontSize" Value="12"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
       <Setter Property="Foreground" Value="{StaticResource InkSoft}"/>
+      <Setter Property="LetterSpacing" Value="0.48"/>
+      <Setter Property="Margin" Value="0,24,0,10"/>
+    </Style>
+    <Style Selector="TextBlock.strong">
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="TextBlock.mono">
+      <Setter Property="FontFamily" Value="{StaticResource Mono}"/>
+      <Setter Property="FontSize" Value="12"/>
+    </Style>
+    <!-- a path: one line, its middle folders dropped for an ellipsis when it does not fit (the whole path in its tooltip) -->
+    <Style Selector="TextBlock.path">
+      <Setter Property="TextWrapping" Value="NoWrap"/>
+      <Setter Property="TextTrimming" Value="PathSegmentEllipsis"/>
+    </Style>
+    <!-- numbers that change in place or stand in a column: a build's percentage and times, sizes, the saves' dates -->
+    <Style Selector="TextBlock.tnum">
+      <Setter Property="FontFeatures" Value="{StaticResource Tabular}"/>
+    </Style>
+    <Style Selector="TextBlock.ok">
+      <Setter Property="Foreground" Value="{StaticResource Go}"/>
+    </Style>
+    <Style Selector="TextBlock.bad">
+      <Setter Property="Foreground" Value="{StaticResource Bad}"/>
+    </Style>
+    <Style Selector="TextBlock.ellipsis">
+      <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
     </Style>
 
     <Style Selector="Border.card">
@@ -68,110 +147,670 @@
       <Setter Property="BorderBrush" Value="{StaticResource GlassLine}"/>
       <Setter Property="BorderThickness" Value="1"/>
       <Setter Property="CornerRadius" Value="10"/>
+      <Setter Property="ClipToBounds" Value="True"/>
     </Style>
-    <!-- a pill: the radius half the height -->
+    <Style Selector="Border.divider">
+      <Setter Property="Height" Value="1"/>
+      <Setter Property="Background" Value="{StaticResource GlassLine}"/>
+    </Style>
+
+    <!-- chips: a pill, the radius half the height -->
     <Style Selector="Border.chip">
-      <Setter Property="Background" Value="#0DFFFFFF"/>
-      <Setter Property="BorderBrush" Value="#14FFFFFF"/>
+      <Setter Property="Background" Value="{StaticResource ChipFill}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource ChipLine}"/>
       <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Height" Value="26"/>
+      <Setter Property="CornerRadius" Value="13"/>
+      <Setter Property="Padding" Value="10,0"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="TextElement.Foreground" Value="{StaticResource InkSoft}"/>
+      <Setter Property="TextElement.FontSize" Value="12"/>
+      <Setter Property="TextElement.FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="Border.chip TextBlock">
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Border.chip.quiet">
       <Setter Property="Height" Value="22"/>
       <Setter Property="CornerRadius" Value="11"/>
-      <Setter Property="Padding" Value="9,0"/>
-      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Padding" Value="8,0"/>
+      <Setter Property="TextElement.FontWeight" Value="Medium"/>
     </Style>
-    <Style Selector="Border.chip > TextBlock">
-      <Setter Property="FontSize" Value="11"/>
-      <Setter Property="FontWeight" Value="SemiBold"/>
-      <Setter Property="VerticalAlignment" Value="Center"/>
-      <Setter Property="Foreground" Value="{StaticResource InkSoft}"/>
+    <Style Selector="Border.chip.small">
+      <Setter Property="Height" Value="20"/>
+      <Setter Property="CornerRadius" Value="10"/>
+      <Setter Property="Padding" Value="7,0"/>
+      <Setter Property="TextElement.FontSize" Value="11"/>
     </Style>
     <Style Selector="Border.chip.go">
       <Setter Property="Background" Value="{StaticResource GoSoft}"/>
-    </Style>
-    <Style Selector="Border.chip.go > TextBlock">
-      <Setter Property="Foreground" Value="{StaticResource Go}"/>
-    </Style>
-    <Style Selector="Border.chip.brand">
-      <Setter Property="Background" Value="{StaticResource BrandSoft}"/>
-    </Style>
-    <Style Selector="Border.chip.brand > TextBlock">
-      <Setter Property="Foreground" Value="{StaticResource BrandInk}"/>
+      <Setter Property="BorderBrush" Value="#405FB08A"/>
+      <Setter Property="TextElement.Foreground" Value="{StaticResource Go}"/>
     </Style>
     <Style Selector="Border.chip.warn">
       <Setter Property="Background" Value="{StaticResource WarnSoft}"/>
+      <Setter Property="BorderBrush" Value="#38E2B86B"/>
+      <Setter Property="TextElement.Foreground" Value="{StaticResource Warn}"/>
     </Style>
-    <Style Selector="Border.chip.warn > TextBlock">
-      <Setter Property="Foreground" Value="{StaticResource Warn}"/>
+    <Style Selector="Border.chip.bad">
+      <Setter Property="Background" Value="{StaticResource BadSoft}"/>
+      <Setter Property="BorderBrush" Value="#40E2776B"/>
+      <Setter Property="TextElement.Foreground" Value="{StaticResource Bad}"/>
+    </Style>
+    <Style Selector="Border.chip.ink">
+      <Setter Property="TextElement.Foreground" Value="{StaticResource Ink}"/>
     </Style>
 
-    <!-- buttons: quiet (glass), primary (blue: the step's action), go (green: Play) -->
+    <!-- a build's channel: release (green), rc (amber), nightly (blue) -->
+    <Style Selector="Border.tag">
+      <Setter Property="Height" Value="20"/>
+      <Setter Property="CornerRadius" Value="10"/>
+      <Setter Property="Padding" Value="8,0"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="TextElement.FontSize" Value="12"/>
+      <Setter Property="TextElement.FontWeight" Value="SemiBold"/>
+      <Setter Property="Background" Value="{StaticResource GoSoft}"/>
+      <Setter Property="TextElement.Foreground" Value="{StaticResource Go}"/>
+    </Style>
+    <Style Selector="Border.tag TextBlock">
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Border.tag.rc">
+      <Setter Property="Background" Value="{StaticResource WarnSoft}"/>
+      <Setter Property="TextElement.Foreground" Value="{StaticResource Warn}"/>
+    </Style>
+    <Style Selector="Border.tag.nightly">
+      <Setter Property="Background" Value="{StaticResource BrandSoft}"/>
+      <Setter Property="TextElement.Foreground" Value="{StaticResource BrandInk}"/>
+    </Style>
+
+    <!-- buttons: quiet (glass), primary (blue: the step's action), go (green: Play), bad (red: delete), link, icon, caption -->
     <Style Selector="Button">
       <Setter Property="FontFamily" Value="{StaticResource Ui}"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
-      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="FontSize" Value="14"/>
       <Setter Property="CornerRadius" Value="8"/>
-      <Setter Property="Padding" Value="14,0"/>
-      <Setter Property="Height" Value="34"/>
+      <Setter Property="Padding" Value="18,0"/>
+      <Setter Property="Height" Value="40"/>
+      <Setter Property="HorizontalContentAlignment" Value="Center"/>
       <Setter Property="VerticalContentAlignment" Value="Center"/>
       <Setter Property="Foreground" Value="{StaticResource Ink}"/>
-      <Setter Property="Background" Value="#08FFFFFF"/>
-      <Setter Property="BorderBrush" Value="#1FFFFFFF"/>
+      <Setter Property="Background" Value="{StaticResource QuietFill}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource QuietLine}"/>
       <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="RenderTransformOrigin" Value="50%,50%"/>
+      <Setter Property="Transitions">
+        <Transitions>
+          <BrushTransition Property="Background" Duration="0:0:0.12"/>
+          <BrushTransition Property="BorderBrush" Duration="0:0:0.12"/>
+          <BrushTransition Property="Foreground" Duration="0:0:0.12"/>
+          <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.08"/>
+        </Transitions>
+      </Setter>
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{TemplateBinding CornerRadius}">
+            <ContentPresenter Name="Content" Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"
+                              Padding="{TemplateBinding Padding}" Foreground="{TemplateBinding Foreground}"
+                              HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                              VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"/>
+          </Border>
+        </ControlTemplate>
+      </Setter>
     </Style>
-    <Style Selector="Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Style Selector="Button:pointerover">
       <Setter Property="Background" Value="{StaticResource GlassHover}"/>
       <Setter Property="BorderBrush" Value="{StaticResource GlassLineStrong}"/>
-      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+    </Style>
+    <Style Selector="Button:pressed">
+      <Setter Property="Background" Value="{StaticResource QuietPressed}"/>
+      <Setter Property="RenderTransform" Value="scale(0.98)"/>
+    </Style>
+    <Style Selector="Button:disabled">
+      <Setter Property="Foreground" Value="{StaticResource InkFaint}"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="{StaticResource GlassLine}"/>
+      <Setter Property="Cursor" Value="Arrow"/>
     </Style>
     <Style Selector="Button.primary">
       <Setter Property="Background" Value="{StaticResource Brand}"/>
-      <Setter Property="BorderBrush" Value="#33FFFFFF"/>
+      <Setter Property="BorderBrush" Value="{StaticResource PrimaryLine}"/>
       <Setter Property="Foreground" Value="White"/>
+      <Setter Property="Padding" Value="20,0"/>
     </Style>
-    <Style Selector="Button.primary:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Style Selector="Button.primary /template/ Border#Bd">
+      <Setter Property="BoxShadow" Value="{StaticResource PrimaryGlow}"/>
+    </Style>
+    <Style Selector="Button.primary:pointerover">
       <Setter Property="Background" Value="{StaticResource BrandHover}"/>
-      <Setter Property="Foreground" Value="White"/>
+      <Setter Property="BorderBrush" Value="{StaticResource PrimaryLine}"/>
+    </Style>
+    <Style Selector="Button.primary:pressed">
+      <Setter Property="Background" Value="{StaticResource BrandPressed}"/>
+    </Style>
+    <Style Selector="Button.primary:disabled">
+      <Setter Property="Background" Value="{StaticResource DisabledFill}"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+      <Setter Property="Foreground" Value="{StaticResource InkFaintText}"/>
+    </Style>
+    <Style Selector="Button.primary:disabled /template/ Border#Bd">
+      <Setter Property="BoxShadow" Value="0 0 0 0 Transparent"/>
     </Style>
     <Style Selector="Button.go">
-      <Setter Property="Background" Value="{StaticResource Go}"/>
-      <Setter Property="BorderBrush" Value="#33FFFFFF"/>
-      <Setter Property="Foreground" Value="{StaticResource GoInk}"/>
-    </Style>
-    <Style Selector="Button.go:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="{StaticResource GoHover}"/>
-      <Setter Property="Foreground" Value="{StaticResource GoInk}"/>
-    </Style>
-    <Style Selector="Button.big">
-      <Setter Property="Height" Value="48"/>
-      <Setter Property="FontSize" Value="16"/>
+      <Setter Property="Height" Value="50"/>
       <Setter Property="Padding" Value="34,0"/>
       <Setter Property="CornerRadius" Value="10"/>
+      <Setter Property="Background" Value="{StaticResource Go}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource GoLine}"/>
+      <Setter Property="Foreground" Value="{StaticResource GoInk}"/>
+      <Setter Property="FontSize" Value="16"/>
+      <Setter Property="FontWeight" Value="Bold"/>
     </Style>
-    <Style Selector="Button.bad">
-      <Setter Property="Foreground" Value="{StaticResource Bad}"/>
+    <Style Selector="Button.go /template/ Border#Bd">
+      <Setter Property="BoxShadow" Value="{StaticResource GoGlow}"/>
+    </Style>
+    <Style Selector="Button.go:pointerover">
+      <Setter Property="Background" Value="{StaticResource GoHover}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource GoLine}"/>
+    </Style>
+    <Style Selector="Button.go:pressed">
+      <Setter Property="Background" Value="{StaticResource GoPressed}"/>
+    </Style>
+    <Style Selector="Button.go:disabled">
+      <Setter Property="Background" Value="{StaticResource DisabledFill}"/>
+      <Setter Property="Foreground" Value="{StaticResource InkFaint}"/>
+    </Style>
+    <Style Selector="Button.go:disabled /template/ Border#Bd">
+      <Setter Property="BoxShadow" Value="0 0 0 0 Transparent"/>
+    </Style>
+    <Style Selector="Button.tall">
+      <Setter Property="Height" Value="50"/>
+      <Setter Property="Padding" Value="26,0"/>
     </Style>
     <Style Selector="Button.small">
+      <Setter Property="Height" Value="32"/>
+      <Setter Property="Padding" Value="12,0"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="CornerRadius" Value="7"/>
+    </Style>
+    <Style Selector="Button.primary.small /template/ Border#Bd">
+      <Setter Property="BoxShadow" Value="0 4 14 0 #663D63E6"/>
+    </Style>
+    <Style Selector="Button.bad">
+      <Setter Property="Background" Value="{StaticResource Bad}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource PrimaryLine}"/>
+      <Setter Property="Foreground" Value="{StaticResource Page}"/>
+    </Style>
+    <Style Selector="Button.bad:pointerover">
+      <Setter Property="Background" Value="{StaticResource BadHover}"/>
+    </Style>
+    <Style Selector="Button.bad:pressed">
+      <Setter Property="Background" Value="{StaticResource BadPressed}"/>
+    </Style>
+    <Style Selector="Button.icon">
+      <Setter Property="Width" Value="32"/>
+      <Setter Property="Height" Value="32"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="CornerRadius" Value="7"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+      <Setter Property="Foreground" Value="{StaticResource InkSoft}"/>
+    </Style>
+    <Style Selector="Button.icon:pointerover">
+      <Setter Property="Background" Value="{StaticResource GlassHover}"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+    </Style>
+    <Style Selector="Button.icon:pressed">
+      <Setter Property="Background" Value="{StaticResource QuietFill}"/>
+    </Style>
+    <Style Selector="Button.icon.iconbad:pointerover">
+      <Setter Property="Background" Value="{StaticResource BadSoft}"/>
+      <Setter Property="Foreground" Value="{StaticResource Bad}"/>
+    </Style>
+    <Style Selector="Button.link">
+      <Setter Property="Height" Value="NaN"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="CornerRadius" Value="3"/>
+      <Setter Property="Foreground" Value="{StaticResource BrandInk}"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Button.link:pointerover">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Foreground" Value="White"/>
+    </Style>
+    <Style Selector="Button.link:pressed">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="RenderTransform" Value="none"/>
+      <Setter Property="Opacity" Value="0.75"/>
+    </Style>
+    <Style Selector="Button.link.soft">
+      <Setter Property="Foreground" Value="{StaticResource InkSoft}"/>
+    </Style>
+    <Style Selector="Button.link.soft:pointerover">
+      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+    </Style>
+    <Style Selector="Button.link.smaller">
+      <Setter Property="FontSize" Value="12"/>
+    </Style>
+    <!-- the title bar's buttons: on Windows flush in the corner, 46 wide, close in Windows' red; on Linux round and inset, as
+         GNOME and KDE draw them (MainWindow's StackPanel.linux) -->
+    <Style Selector="Button.caption">
+      <Setter Property="Width" Value="46"/>
+      <Setter Property="Height" Value="40"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="CornerRadius" Value="0"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Foreground" Value="{StaticResource CaptionInk}"/>
+      <Setter Property="VerticalAlignment" Value="Top"/>
+      <Setter Property="Focusable" Value="False"/>
+    </Style>
+    <Style Selector="Button.caption c|Icon">
+      <Setter Property="Width" Value="20"/>
+      <Setter Property="Height" Value="20"/>
+    </Style>
+    <Style Selector="Button.caption.gear c|Icon">
+      <Setter Property="Width" Value="17"/>
+      <Setter Property="Height" Value="17"/>
+    </Style>
+    <Style Selector="Button.caption:pointerover">
+      <Setter Property="Background" Value="{StaticResource GlassHover}"/>
+      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+    </Style>
+    <Style Selector="Button.caption:pressed">
+      <Setter Property="Background" Value="{StaticResource Glass}"/>
+      <Setter Property="RenderTransform" Value="none"/>
+    </Style>
+    <Style Selector="Button.caption.close:pointerover">
+      <Setter Property="Background" Value="{StaticResource CloseHover}"/>
+      <Setter Property="Foreground" Value="White"/>
+    </Style>
+    <Style Selector="Button.caption.close:pressed">
+      <Setter Property="Background" Value="{StaticResource ClosePressed}"/>
+    </Style>
+    <Style Selector="StackPanel.linux">
+      <Setter Property="Spacing" Value="10"/>
+      <Setter Property="Margin" Value="0,18,20,0"/>
+    </Style>
+    <Style Selector="StackPanel.linux Button.caption">
+      <Setter Property="Width" Value="28"/>
       <Setter Property="Height" Value="28"/>
-      <Setter Property="Padding" Value="10,0"/>
+      <Setter Property="CornerRadius" Value="14"/>
+      <Setter Property="Background" Value="{StaticResource ChipFill}"/>
+      <Setter Property="Foreground" Value="{StaticResource InkSoft}"/>
+    </Style>
+    <Style Selector="StackPanel.linux Button.caption c|Icon">
+      <Setter Property="Width" Value="16"/>
+      <Setter Property="Height" Value="16"/>
+      <Setter Property="Weight" Value="1.6"/>
+    </Style>
+    <Style Selector="StackPanel.linux Button.caption.gear">
+      <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    <Style Selector="StackPanel.linux Button.caption.gear c|Icon">
+      <Setter Property="Weight" Value="1"/>
+    </Style>
+    <Style Selector="StackPanel.linux Button.caption:pointerover, StackPanel.linux Button.caption.close:pointerover">
+      <Setter Property="Background" Value="{StaticResource GlassLineStrong}"/>
+      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+    </Style>
+    <Style Selector="StackPanel.linux Button.caption:pressed, StackPanel.linux Button.caption.close:pressed">
+      <Setter Property="Background" Value="{StaticResource GlassHover}"/>
+    </Style>
+    <!-- a whole row that is a button (a version in the list, Advanced's head) -->
+    <Style Selector="Button.row">
+      <Setter Property="Height" Value="NaN"/>
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="CornerRadius" Value="0"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="FontWeight" Value="Normal"/>
+      <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+    </Style>
+    <Style Selector="Button.row:pointerover">
+      <Setter Property="Background" Value="{StaticResource RowHover}"/>
+    </Style>
+    <Style Selector="Button.row:pressed">
+      <Setter Property="Background" Value="{StaticResource Glass}"/>
+      <Setter Property="RenderTransform" Value="none"/>
+    </Style>
+
+    <!-- a switch: 38x22, on in brand blue -->
+    <Style Selector="ToggleButton.switch">
+      <Setter Property="Width" Value="38"/>
+      <Setter Property="Height" Value="22"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Name="Track" Width="38" Height="22" CornerRadius="11" Background="#1FFFFFFF" BorderThickness="1"
+                  BorderBrush="{StaticResource GlassLineStrong}">
+            <Ellipse Name="Knob" Width="14" Height="14" HorizontalAlignment="Left" Margin="3,0,0,0" Fill="{StaticResource InkSoft}"/>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="ToggleButton.switch /template/ Border#Track">
+      <Setter Property="Transitions">
+        <Transitions>
+          <BrushTransition Property="Background" Duration="0:0:0.14"/>
+          <BrushTransition Property="BorderBrush" Duration="0:0:0.14"/>
+        </Transitions>
+      </Setter>
+    </Style>
+    <Style Selector="ToggleButton.switch /template/ Ellipse#Knob">
+      <Setter Property="Transitions">
+        <Transitions>
+          <ThicknessTransition Property="Margin" Duration="0:0:0.14" Easing="CubicEaseOut"/>
+        </Transitions>
+      </Setter>
+    </Style>
+    <Style Selector="ToggleButton.switch:checked /template/ Border#Track">
+      <Setter Property="Background" Value="{StaticResource Brand}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource BrandHover}"/>
+    </Style>
+    <Style Selector="ToggleButton.switch:checked /template/ Ellipse#Knob">
+      <Setter Property="Margin" Value="19,0,0,0"/>
+      <Setter Property="Fill" Value="White"/>
+    </Style>
+    <Style Selector="ToggleButton.switch:pointerover /template/ Border#Track">
+      <Setter Property="Background" Value="#2BFFFFFF"/>
+    </Style>
+    <Style Selector="ToggleButton.switch:pointerover /template/ Ellipse#Knob">
+      <Setter Property="Fill" Value="{StaticResource Ink}"/>
+    </Style>
+    <Style Selector="ToggleButton.switch:checked:pointerover /template/ Border#Track">
+      <Setter Property="Background" Value="{StaticResource BrandHover}"/>
+    </Style>
+    <Style Selector="ToggleButton.switch:disabled">
+      <Setter Property="Opacity" Value="0.4"/>
+      <Setter Property="Cursor" Value="Arrow"/>
+    </Style>
+
+    <!-- a tick box -->
+    <Style Selector="CheckBox.tick">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="FontWeight" Value="Medium"/>
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Grid ColumnDefinitions="18,*" Background="Transparent">
+            <Border Name="Box" Width="18" Height="18" CornerRadius="5" BorderThickness="1.5" BorderBrush="{StaticResource TickLine}"
+                    VerticalAlignment="Top" Margin="0,2,0,0">
+              <c:Icon Name="Mark" Kind="check" Width="14" Height="14" Foreground="White" Opacity="0"/>
+            </Border>
+            <ContentPresenter Grid.Column="1" Margin="10,0,0,0" Content="{TemplateBinding Content}" VerticalAlignment="Center"/>
+          </Grid>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="CheckBox.tick:checked /template/ Border#Box">
+      <Setter Property="Background" Value="{StaticResource Brand}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource Brand}"/>
+    </Style>
+    <Style Selector="CheckBox.tick:checked /template/ c|Icon#Mark">
+      <Setter Property="Opacity" Value="1"/>
+    </Style>
+    <Style Selector="CheckBox.tick:pointerover /template/ Border#Box">
+      <Setter Property="BorderBrush" Value="{StaticResource InkSoft}"/>
+    </Style>
+    <Style Selector="CheckBox.tick:checked:pointerover /template/ Border#Box">
+      <Setter Property="Background" Value="{StaticResource BrandHover}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource BrandHover}"/>
+    </Style>
+    <Style Selector="CheckBox.tick:disabled">
+      <Setter Property="Opacity" Value="0.45"/>
+    </Style>
+
+    <!-- radio rows: the found game files (row), the dialogs' options (chan), the settings' channel (seg) -->
+    <Style Selector="RadioButton.row, RadioButton.chan">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+      <Setter Property="Padding" Value="16,8"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                  BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{TemplateBinding CornerRadius}" Padding="{TemplateBinding Padding}">
+            <Grid ColumnDefinitions="18,*">
+              <Border Name="Ring" Width="18" Height="18" CornerRadius="9" BorderThickness="2" BorderBrush="{StaticResource InkFaint}" VerticalAlignment="Center">
+                <Ellipse Name="Dot" Width="8" Height="8" Fill="{StaticResource Brand}" IsVisible="False"/>
+              </Border>
+              <ContentPresenter Grid.Column="1" Margin="14,0,0,0" Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"
+                                HorizontalContentAlignment="Stretch" VerticalAlignment="Center"/>
+            </Grid>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="RadioButton.row:pointerover">
+      <Setter Property="Background" Value="{StaticResource RowHover}"/>
+    </Style>
+    <Style Selector="RadioButton.row:pointerover /template/ Border#Ring">
+      <Setter Property="BorderBrush" Value="{StaticResource InkSoft}"/>
+    </Style>
+    <Style Selector="RadioButton:checked /template/ Border#Ring">
+      <Setter Property="BorderBrush" Value="{StaticResource Brand}"/>
+    </Style>
+    <Style Selector="RadioButton:checked /template/ Ellipse#Dot">
+      <Setter Property="IsVisible" Value="True"/>
+    </Style>
+    <Style Selector="RadioButton:disabled /template/ Border#Ring">
+      <Setter Property="Opacity" Value="0.45"/>
+    </Style>
+    <Style Selector="RadioButton:disabled">
+      <Setter Property="Cursor" Value="Arrow"/>
+    </Style>
+    <Style Selector="RadioButton.row:disabled">
+      <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    <Style Selector="RadioButton.chan">
+      <Setter Property="Padding" Value="14,12"/>
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="BorderBrush" Value="{StaticResource GlassLine}"/>
+      <Setter Property="Background" Value="{StaticResource Glass}"/>
+    </Style>
+    <Style Selector="RadioButton.chan.compact">
+      <Setter Property="Padding" Value="14,7"/>
+    </Style>
+    <Style Selector="RadioButton.chan:pointerover">
+      <Setter Property="Background" Value="{StaticResource GlassHover}"/>
+    </Style>
+    <Style Selector="RadioButton.chan:checked">
+      <Setter Property="Background" Value="#1F3D63E6"/>
+      <Setter Property="BorderBrush" Value="{StaticResource Brand}"/>
+    </Style>
+    <Style Selector="RadioButton.chan:disabled">
+      <Setter Property="Background" Value="{StaticResource Glass}"/>
+    </Style>
+    <Style Selector="RadioButton.seg">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Name="Bd" Padding="14,10" CornerRadius="8" BorderThickness="1" Background="{StaticResource QuietFill}" BorderBrush="{StaticResource QuietLine}">
+            <ContentPresenter Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"/>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="RadioButton.seg:pointerover /template/ Border#Bd">
+      <Setter Property="Background" Value="{StaticResource GlassHover}"/>
+    </Style>
+    <Style Selector="RadioButton.seg:checked /template/ Border#Bd">
+      <Setter Property="Background" Value="{StaticResource BrandSoft}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource Brand}"/>
+    </Style>
+
+    <!-- dropdowns -->
+    <Style Selector="ComboBox">
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Height" Value="40"/>
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="Background" Value="{StaticResource QuietFill}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource QuietLine}"/>
+      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
+      <Setter Property="Padding" Value="12,0,8,0"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="ComboBox.dd">
+      <Setter Property="Width" Value="184"/>
+      <Setter Property="Height" Value="32"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="MinHeight" Value="32"/>
+    </Style>
+    <Style Selector="ComboBox:pointerover /template/ Border#Background">
+      <Setter Property="Background" Value="{StaticResource GlassHover}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource GlassLineStrong}"/>
+    </Style>
+    <Style Selector="ComboBoxItem">
+      <Setter Property="FontSize" Value="13"/>
+    </Style>
+
+    <!-- a folder's path, in mono -->
+    <Style Selector="TextBox.path">
+      <Setter Property="FontFamily" Value="{StaticResource Mono}"/>
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="Height" Value="40"/>
+      <Setter Property="MinHeight" Value="40"/>
+      <Setter Property="Padding" Value="12,0"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="Background" Value="{StaticResource Glass}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource GlassLine}"/>
+      <Setter Property="Foreground" Value="{StaticResource InkSoft}"/>
+    </Style>
+    <Style Selector="TextBox.path:pointerover /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="{StaticResource GlassHover}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource GlassLineStrong}"/>
+    </Style>
+    <Style Selector="TextBox.path:focus /template/ Border#PART_BorderElement">
+      <Setter Property="Background" Value="{StaticResource Glass}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource Brand}"/>
+    </Style>
+
+    <!-- progress: the bar eases to its new value rather than jumping -->
+    <Style Selector="c|Bar">
+      <Setter Property="Transitions">
+        <Transitions>
+          <DoubleTransition Property="Value" Duration="0:0:0.3" Easing="CubicEaseOut"/>
+        </Transitions>
+      </Setter>
+    </Style>
+    <!-- a dialog arrives: a quick fade and a few pixels' rise -->
+    <Style Selector="Window:not(.still) Border.dialog">
+      <Style.Animations>
+        <Animation Duration="0:0:0.16" Easing="CubicEaseOut" FillMode="Forward">
+          <KeyFrame Cue="0%">
+            <Setter Property="Opacity" Value="0"/>
+            <Setter Property="TranslateTransform.Y" Value="8"/>
+          </KeyFrame>
+          <KeyFrame Cue="100%">
+            <Setter Property="Opacity" Value="1"/>
+            <Setter Property="TranslateTransform.Y" Value="0"/>
+          </KeyFrame>
+        </Animation>
+      </Style.Animations>
+    </Style>
+
+    <!-- focus rings, shown for the keyboard and a controller only (:focus-visible): drawn over the window, so a card's clip
+         does not cut them; each follows its control's corners, 4 px out (rows: 2 px in, inside their card) -->
+    <Style Selector="Button">
+      <Setter Property="FocusAdorner">
+        <FocusAdornerTemplate>
+          <Border AdornerLayer.IsClipEnabled="False" Margin="-4" CornerRadius="12" BorderThickness="2" BorderBrush="{StaticResource FocusRing}"/>
+        </FocusAdornerTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="Button.small, Button.icon">
+      <Setter Property="FocusAdorner">
+        <FocusAdornerTemplate>
+          <Border AdornerLayer.IsClipEnabled="False" Margin="-4" CornerRadius="11" BorderThickness="2" BorderBrush="{StaticResource FocusRing}"/>
+        </FocusAdornerTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="Button.go, Button.tall">
+      <Setter Property="FocusAdorner">
+        <FocusAdornerTemplate>
+          <Border AdornerLayer.IsClipEnabled="False" Margin="-4" CornerRadius="14" BorderThickness="2" BorderBrush="{StaticResource FocusRing}"/>
+        </FocusAdornerTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="Button.link">
+      <Setter Property="FocusAdorner">
+        <FocusAdornerTemplate>
+          <Border AdornerLayer.IsClipEnabled="False" Margin="-4,-2" CornerRadius="6" BorderThickness="2" BorderBrush="{StaticResource FocusRing}"/>
+        </FocusAdornerTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="Button.row">
+      <Setter Property="FocusAdorner">
+        <FocusAdornerTemplate>
+          <Border AdornerLayer.IsClipEnabled="False" Margin="2" CornerRadius="6" BorderThickness="2" BorderBrush="{StaticResource FocusRing}"/>
+        </FocusAdornerTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="ToggleButton.switch">
+      <Setter Property="FocusAdorner">
+        <FocusAdornerTemplate>
+          <Border AdornerLayer.IsClipEnabled="False" Margin="-4" CornerRadius="15" BorderThickness="2" BorderBrush="{StaticResource FocusRing}"/>
+        </FocusAdornerTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="CheckBox.tick">
+      <Setter Property="FocusAdorner">
+        <FocusAdornerTemplate>
+          <Border AdornerLayer.IsClipEnabled="False" Margin="-4,-3" CornerRadius="6" BorderThickness="2" BorderBrush="{StaticResource FocusRing}"/>
+        </FocusAdornerTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="RadioButton.row">
+      <Setter Property="FocusAdorner">
+        <FocusAdornerTemplate>
+          <Border AdornerLayer.IsClipEnabled="False" Margin="2" CornerRadius="6" BorderThickness="2" BorderBrush="{StaticResource FocusRing}"/>
+        </FocusAdornerTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="RadioButton.chan, RadioButton.seg, ComboBox">
+      <Setter Property="FocusAdorner">
+        <FocusAdornerTemplate>
+          <Border AdornerLayer.IsClipEnabled="False" Margin="-4" CornerRadius="12" BorderThickness="2" BorderBrush="{StaticResource FocusRing}"/>
+        </FocusAdornerTemplate>
+      </Setter>
+    </Style>
+    <Style Selector="TextBox">
+      <Setter Property="FocusAdorner" Value="{x:Null}"/>
+    </Style>
+
+    <!-- a warning box -->
+    <Style Selector="Border.warnbox">
+      <Setter Property="Background" Value="{StaticResource WarnSoft}"/>
+      <Setter Property="BorderBrush" Value="#33E2B86B"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="8"/>
+      <Setter Property="Padding" Value="12,10"/>
+      <Setter Property="Margin" Value="0,16,0,0"/>
+      <Setter Property="TextElement.FontSize" Value="13"/>
+    </Style>
+
+    <Style Selector="ToolTip">
+      <Setter Property="Background" Value="{StaticResource Raised}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource LineStrong}"/>
+      <Setter Property="Foreground" Value="{StaticResource Ink}"/>
       <Setter Property="FontSize" Value="12"/>
     </Style>
 
-    <!-- the channel choice: three pills -->
-    <Style Selector="ListBox.segments">
-      <Setter Property="Background" Value="Transparent"/>
-      <Setter Property="Padding" Value="0"/>
-    </Style>
-    <Style Selector="ListBox.segments ListBoxItem">
-      <Setter Property="Padding" Value="12,5"/>
-      <Setter Property="Margin" Value="0,0,6,0"/>
-      <Setter Property="CornerRadius" Value="14"/>
-      <Setter Property="Background" Value="#08FFFFFF"/>
-      <Setter Property="BorderBrush" Value="#1FFFFFFF"/>
-      <Setter Property="BorderThickness" Value="1"/>
-    </Style>
-    <Style Selector="ListBox.segments ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
-      <Setter Property="Background" Value="{StaticResource BrandSoft}"/>
-      <Setter Property="BorderBrush" Value="{StaticResource Brand}"/>
+    <!-- less motion when the desktop asks for it (Motion.cs): last, so it overrides every transition above -->
+    <Style Selector="Window.still :is(Control), Window.still ToggleButton.switch /template/ :is(Control)">
+      <Setter Property="Transitions" Value="{x:Null}"/>
     </Style>
   </Application.Styles>
 </Application>
