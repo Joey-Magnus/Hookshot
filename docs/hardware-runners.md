@@ -39,6 +39,10 @@ That program is where the safety is. It must:
 - **Run everything in a throwaway VM or container**, made fresh for the job and deleted after it, as an OS user with
   no access to your home folder, SSH keys, browser profiles or other repositories. A dedicated test machine or VM is
   safer than a container on your desktop: passing the GPU into a container leaves the graphics driver as a way out.
+  A device that holds nothing but the dump (a Steam Deck kept for testing) is the easiest case.
+- **Build apart from the run.** The build is where most of the pull request's code runs (the Python build scripts),
+  and it needs no GPU: it can go in a VM with no GPU at all. Only the built game needs the GPU, in a tight sandbox of
+  its own.
 - **Fetch exactly that commit, then cut the network.** The build, the game and the scene run with no network at all,
   so nothing can send your dump (or anything else) anywhere.
 - **Give the dump read-only**, mounted into the sandbox, never copied out of it. A built game folder is made from the
@@ -54,8 +58,12 @@ And the runner itself:
 - Prefer a just-in-time or `--ephemeral` runner, which takes one job and is removed.
 - Keep the runner software up to date, and stop it whenever you like: a test just waits in the queue.
 
-Register runners on your fork first (the workflows run there the same way, with you as the maintainer). Whether runners
-are registered on this repository at all is the maintainers' decision.
+**Register runners on your own fork, not on this repository.** A runner on this repository can be picked by any
+workflow that runs here, and a pull request can add its own workflow (on `pull_request`) that asks for
+`[self-hosted, hookshot-hardware]`: that job runs straight on the runner, past the label and the sandbox. Approving a
+contributor's first workflow runs does not close this. On your fork only you push workflows, and you start the tests.
+Runners on this repository would need runner groups limited to `hardware-test.yml`, which a personal account's
+repository does not have; that, and whether to do it at all, is the maintainers' decision (#2797).
 
 ## What comes back
 
