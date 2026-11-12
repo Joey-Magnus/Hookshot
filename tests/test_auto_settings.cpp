@@ -83,6 +83,41 @@ int main() {
     moved.vram_mb += 3;   // (the heap's size wobbles by a few MB between drivers)
     expect(fingerprint(h, 0x10de, 0x2782) == fingerprint(moved, 0x10de, 0x2782), "a few MB more memory: the same fingerprint");
 
+    // (the tuning in play)
+    {
+        Tuning t;
+        for (int i = 0; i < kWindows - 1; i++) expect(tune(t, 17.5f, 900, 57, 60, true, true) == WAIT, "gathering");
+        expect(tune(t, 17.5f, 900, 57, 60, true, true) == LIGHTER, "the GPU over 90% of 16.7 ms: one step lighter");
+        for (int i = 0; i < kWindows - 1; i++) tune(t, 6.0f, 900, 60, 60, true, true);
+        expect(tune(t, 6.0f, 900, 60, 60, true, true) == KEEP && t.done, "after a step down, never back up: done");
+    }
+    {
+        Tuning t;
+        for (int i = 0; i < kWindows; i++) tune(t, 20, 100, 30, 60, true, true);   // (a menu: under 150 draws)
+        expect(t.n == 0 && !t.done, "menus and loading screens do not count");
+        for (int i = 0; i < kWindows - 1; i++) tune(t, 7.0f, 900, 45, 60, true, true);
+        expect(tune(t, 7.0f, 900, 45, 60, true, true) == CPU_BOUND && t.done, "45 fps with the GPU at 7 ms: the CPU holds it");
+    }
+    {
+        Tuning t;
+        for (int i = 0; i < kWindows - 1; i++) tune(t, 5.0f, 900, 60, 60, true, true);
+        expect(tune(t, 5.0f, 900, 60, 60, true, true) == HEAVIER, "the GPU at 30%: one step heavier");
+        for (int i = 0; i < kWindows - 1; i++) tune(t, 5.0f, 900, 60, 60, true, false);
+        expect(tune(t, 5.0f, 900, 60, 60, true, false) == KEEP, "back at the profile's start: no further");
+    }
+    {
+        Tuning t;
+        int lighter = 0;
+        for (int r = 0; r < 5; r++)
+            for (int i = 0; i < kWindows; i++) lighter += tune(t, 25.0f, 900, 40, 60, true, true) == LIGHTER;
+        expect(lighter == kMaxSteps && t.done, "at most two steps");
+    }
+    {
+        Tuning t;
+        for (int i = 0; i < kWindows - 1; i++) tune(t, 18.0f, 900, 55, 60, false, true);
+        expect(tune(t, 18.0f, 900, 55, 60, false, true) == KEEP, "no lighter step left: keep");
+    }
+
     if (failures) return EXIT_FAILURE;
     std::printf("auto settings: all checks passed\n");
     return EXIT_SUCCESS;

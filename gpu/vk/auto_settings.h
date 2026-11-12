@@ -124,4 +124,44 @@ inline uint64_t fingerprint(const Hardware& h, uint32_t vendor_id, uint32_t devi
     return f;
 }
 
+// The measured tuning in play: the render resolution moved toward what this PC holds at its frame rate cap. Each window is the
+// replay's 120 presents (vk_replay.cpp): the GPU's time a frame, the draws a frame and the frame rate. Only windows of play count
+// (150 draws a frame or more, as the control bridge's "play"; menus and loading screens draw fewer). After kWindows of them,
+// their middle values decide:
+// - the frame rate is short of the cap while the GPU is idle for a quarter of the frame or more: the CPU holds it (the game's
+//   threads, the replay), and a smaller picture would not help: done, nothing changed
+// - the GPU takes over 90% of the cap's frame time: one step smaller (lighter)
+// - under 50%: one step larger, never past the tier's start (the profile's own choice): what Auto chose was for the card's memory
+// - else: done
+// At most kMaxSteps changes in all; a step down is never followed by a step up (no seesaw). Then done until the hardware changes
+constexpr int kWindows = 8;
+constexpr int kMaxSteps = 2;
+enum Verdict : int { WAIT = 0, KEEP = 1, CPU_BOUND = 2, LIGHTER = 3, HEAVIER = 4 };
+struct Tuning {
+    float gpu_ms[kWindows] = {}, fps[kWindows] = {};
+    int n = 0;          // (play windows gathered since the last change)
+    int steps = 0;
+    bool went_down = false;
+    bool done = false;
+};
+inline float middle(float* v, int n) {   // (the median; sorts v)
+    for (int i = 1; i < n; i++)
+        for (int j = i; j > 0 && v[j] < v[j - 1]; j--) { const float t = v[j]; v[j] = v[j - 1]; v[j - 1] = t; }
+    return n % 2 ? v[n / 2] : (v[n / 2 - 1] + v[n / 2]) / 2;
+}
+// One window: WAIT while gathering, else the verdict. cap_fps: the frame rate cap's (the display's refresh when uncapped);
+// can_lighter, can_heavier: whether the render resolution has a step that way (heavier: not past the profile's start)
+inline Verdict tune(Tuning& t, float gpu_ms, float draws, float fps, float cap_fps, bool can_lighter, bool can_heavier) {
+    if (t.done || draws < 150 || !(gpu_ms > 0) || !(fps > 0) || !(cap_fps > 0)) return WAIT;
+    t.gpu_ms[t.n] = gpu_ms, t.fps[t.n] = fps;
+    if (++t.n < kWindows) return WAIT;
+    const float g = middle(t.gpu_ms, t.n), f = middle(t.fps, t.n), budget = 1000.0f / cap_fps;
+    t.n = 0;
+    if (f < cap_fps * 0.95f && g < 0.75f * (1000.0f / f)) return t.done = true, CPU_BOUND;
+    if (g > 0.9f * budget && can_lighter && t.steps < kMaxSteps) return t.steps++, t.went_down = true, LIGHTER;
+    if (g < 0.5f * budget && can_heavier && !t.went_down && t.steps < kMaxSteps) return t.steps++, HEAVIER;
+    t.done = true;
+    return KEEP;
+}
+
 } // namespace auto_settings

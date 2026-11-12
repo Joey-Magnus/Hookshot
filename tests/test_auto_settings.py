@@ -27,9 +27,12 @@ def check_source():
                                "::auto_settings::choose(hw)", "if (fp == auto_for)", 'fprintf(f, "auto_for=%016llx\\n"',
                                # (save() keeps the lines it does not write: auto_for must be one it writes, or the old line,
                                # kept after the new one, wins at the next start and Auto chooses again every time)
-                               '|| key == "memory_budget" || key == "auto_for";'])
+                               '|| key == "memory_budget" || key == "auto_for" ||', 'key == "auto_tuned";',
+                               # (the measured tuning in play: from the replay's windows, finished once for this PC)
+                               "::auto_settings::tune(tuning,", 'fprintf(f, "auto_tuned=%016llx\\n"'])
     main = (ROOT / "gpu/vk/vk_main.cpp").read_text(encoding="utf-8")
     need("vk_main.cpp", main, ["auto_profile();   // (the Quality preset Auto (this PC)", "menu_auto_for_gpu(p, hw);"])
+    need("vk_replay.cpp", (ROOT / "gpu/vk/vk_replay.cpp").read_text(encoding="utf-8"), ["menu_auto_tune(gpu_ms, draws, 120.0 / secs);"])
     api = (ROOT / "gpu/vk/vk_api.h").read_text(encoding="utf-8")
     need("vk_api.h", api, ["#define MKWVK_WINDOW_VERSION 3", "void (*desktop_size)(void *window, int *width, int *height);"])
     host = (ROOT / "host/posix/display_sdl.c").read_text(encoding="utf-8")
