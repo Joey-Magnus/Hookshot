@@ -55,6 +55,7 @@ python -I scripts/hookshot_ctl.py option get text_speed
 python -I scripts/hookshot_ctl.py option set text_speed 3
 python -I scripts/hookshot_ctl.py teleport                               # the destinations
 python -I scripts/hookshot_ctl.py teleport 1 --arrive 30                 # sent or refused, then arrived
+python -I scripts/hookshot_ctl.py age adult --arrive 30                  # the Debug tab's Switch age, then reloaded
 python -I scripts/hookshot_ctl.py watch --events present,state --log "hid:"
 python -I scripts/hookshot_ctl.py quit
 ```
@@ -100,6 +101,7 @@ from the game, such as a log line's escape sequences, is printed with control ch
 | `wait EVENT [--frames N] [--frame N] [--state S] [--map NAME] [--timeout 60]` | Waits for an event: `present`, `frame`, `in_play`, `state`, `loading_start`, `loading_end`, `change`, `map` |
 | `option get [NAME]`, `option set NAME VALUE` | The Insert menu's settings |
 | `teleport [INDEX\|MAP] [--arrive SECS] [--timeout 10] [--no-wait]` | The debug teleport. Without a destination, lists them. `--arrive` then waits up to SECS for the map |
+| `age [child\|adult] [--arrive SECS] [--timeout 10] [--no-wait]` | The Debug tab's Switch age; without an age, the other one. `--arrive` then waits up to SECS until the map has reloaded |
 | `saves` | The save folder the game uses, its files, newest slot first |
 | `slots [--thumbs DIR]` | One line a save slot: last written, sizes, scene; `*` marks the newest. `--thumbs` writes each slot's file-select picture as `DIR/slot_NN.jpg` |
 | `watch [--events present,state,log,map] [--every 60] [--log TEXT] [--count N]` | Prints subscription events. `--log` alone watches log lines containing TEXT |
@@ -352,6 +354,31 @@ It changes the game as the menu's teleport does, and a save made after it keeps 
 < {"id":13,"ok":true,"frame":6190,"state":"loading","waited":187,"map":"HyruleField_Child"}
 ```
 
+### age
+
+The Debug tab's Switch age, so a script can reach the adult's maps (or the child's) without a save of that age: `to`,
+`"child"` or `"adult"`; without it, the other age. The game takes it as it takes a teleport, at the player's next
+update in play, and does what the menu does: Link's age flipped and the current map reloaded in the other age (the
+Market's, when this map has no match). It shares the teleport's slot, so a later teleport or age switch replaces one
+not taken yet (`cancelled`), and the replies are the teleport's:
+
+- `"age"` (the age asked for), `"sent": true` and `map`, the map it reloads. `wait loading_end` then tells when it
+  arrived. Not `wait map`: in a dungeon the map has the same name for both ages (`ForestTemple`), so a wait for it is
+  met before the reload starts. `accepted` as for a teleport.
+- `"sent": false` when Link is that age already: nothing is done. The game checks the age asked for when it takes it,
+  so an old sample of Link's age in `status` (read every 250 ms, and not during a load) never flips him the wrong way.
+  Without `to`, the other age is decided from that sample.
+- `refused`, with the game's reason (as a teleport's, or Link's age not found or not written in the game's data);
+  `timeout` when the game did not take it (not in play); `unavailable` before a save is loaded, when the age is not
+  known.
+
+With `"wait": false` the reply is immediate, with `"sent": null`. The game logs it (`cheats: age toggle: ...`).
+
+```
+> {"id":14,"cmd":"age","to":"adult"}
+< {"id":14,"ok":true,"frame":7310,"age":"adult","sent":true,"map":"KokiriForest_Adult","accepted":true}
+```
+
 ### quit
 
 Replies, then the game exits as when its window is closed: the log is flushed and the exit code is 0. The socket is
@@ -455,7 +482,7 @@ Named game values (scene, Link's position, health) are not served yet: the `symb
   A socket that a live game answers on is left alone too. A stale one, left by a game that ended, is removed.
 - **Guest memory is a second opt-in**, `HOS_CONTROL_MEM` (see [Guest memory](#guest-memory)).
 - **What a client can do.** Anything the player can do with a controller and the Insert menu's settings, but not its
-  debug tools, apart from the teleport. It can also write a PNG to any path the game's user can write, list the save
+  debug tools, apart from the teleport and Switch age. It can also write a PNG to any path the game's user can write, list the save
   folder, and end the game.
 - **The game never waits for a client.** The bridge's own thread does all the socket I/O. The controller's read takes
   one short lock that the bridge never holds over I/O. A client that sends nonsense gets errors; one that stops
@@ -504,7 +531,7 @@ The game side is `host/control.c`. It hooks into:
 | `gpu/vk/vk_replay.cpp` | Shots at a present |
 | `gpu/vk/vk_menu.cpp` | The Insert menu's settings, through its own setter |
 | `host/hos_thread.c` | Log lines |
-| `host/hos_main.c` | The start, the current map and the debug teleport |
+| `host/hos_main.c` | The start, the current map, the debug teleport and the age switch |
 | `host/hos_mem.c` | Guest memory's bounds |
 | `host/nn_fs.c` | The save folder |
 | `host/rx_backend.c` | The renderer's side |

@@ -22,7 +22,7 @@ where to get the game, how to decrypt it, or for someone else's files. `.gitigno
 
 | | What |
 |---|---|
-| **Test on your hardware** | Reports from AMD and Intel cards, other drivers, other distributions and SteamOS are useful even when everything works. Add a row to [tested configurations](docs/tested-configurations.md) |
+| **Test on your hardware** | Reports from AMD and Intel cards, other drivers, other distributions and SteamOS are useful even when everything works. Add a row to [tested configurations](docs/tested-configurations.md). Pull requests that need a run on your hardware are queued as [test requests](docs/dev/test-requests.md): pick one up, by hand or with an agent |
 | **Play further** | Reaching new areas, cutscenes, menus and items finds problems nobody has seen yet |
 | **Report what is broken** | Use the [issue forms](https://github.com/NotRexed/Hookshot/issues/new/choose), with the version, your hardware, where you were and `hookshot_log.txt` |
 | **Fix something** | The [worklist](docs/worklist.md) has the open work, scored; pick from its top. [Workflow](docs/dev/workflow.md) says how work is chosen and claimed |
@@ -47,8 +47,10 @@ where to get the game, how to decrypt it, or for someone else's files. `.gitigno
 4. Link the issues it fixes with `Fixes #<n>`, one line each. Use `Part of #<n>` or `See #<n>` to keep an issue open.
 5. Include screenshots when the change shows on screen: before and after for a fix, the new screen for a feature.
 6. Add or update a game-free check where you can, and run `python -I -B tests/run_all.py` (see
-   [testing](docs/dev/testing.md)). CI must pass.
-7. Rebase on `main` when it moves, and resolve conflicts in your branch.
+   [testing](docs/dev/testing.md)). CI must pass. CI has no game, so also run the change in the game and put what you
+   measured in the description: before and after on the same scene for a performance change, the bug gone for a fix.
+   An untested change is opened as a draft.
+7. Rebase or merge `main` when it moves, and resolve conflicts in your branch.
 8. Commit no build output, dumps or generated files.
 
 If you used an AI tool, record it with `Assisted-by:` and `Co-Authored-By:` trailers in your commits.

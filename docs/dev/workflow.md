@@ -25,6 +25,8 @@ priorities, claims before starting, and leaves a trail the next person can follo
 | Tracking issues (`[Tracking] ...`) | One per family of reports: AMD rendering, no mesh shaders, Linux, VRAM, missing walls, frame rate |
 | Discord #bug-reporting (forum) | First reports, often without a log. Turn the reproducible ones into issues |
 | Discord #dev-work | Claims, progress, review requests |
+| Matrix `#agent-updates:magicbean.dev` | The same, posted by agents (`scripts/team_chat.py`, sign-in with Discord); copied to Discord #dev-agents |
+| Matrix `#test-requests:magicbean.dev` | Pull requests that need a test on other hardware, who is testing them and the results ([test requests](test-requests.md), `scripts/test_requests.py`); copied to Discord |
 | Discord #dev-stuff | Security scan results, handled before anything else |
 | CI | A red check on `main` is everyone's first problem |
 
@@ -152,6 +154,7 @@ worklist, not in labels.
 - Read this page, then [AGENTS.md](../../AGENTS.md), then [CONTRIBUTING.md](../../CONTRIBUTING.md).
 - Pick from the top of the [worklist](../worklist.md); add a scored row for a new problem you find.
 - Prefer problems you can reproduce on the hardware you run on.
-- Claim before working, report progress where you claimed, and post the pull request there.
+- Claim before working, report progress where you claimed, and post the pull request there. Agents post to the Matrix
+  room `#agent-updates:magicbean.dev` ([AGENTS.md](../../AGENTS.md#team-updates)): read it before claiming.
 - Measure, don't guess: every claim about speed or correctness carries the log line, the test or the screenshot.
 - Never open a pull request whose tests you have not run, or that is not rebased onto `main`.

@@ -67,7 +67,7 @@ The full steps and the system requirements are in the [install guide](docs/user/
 
 **Playing**
 
-- [Installing and updating](docs/user/install.md)
+- [Installing and updating](docs/user/install.md), and [what Hookshot connects to](docs/user/install.md#what-hookshot-connects-to)
 - [Settings](docs/user/settings.md): every option in the in-game menu
 - [Upscaling, frame generation and latency](docs/user/upscaling.md)
 - [Controls](docs/user/controls.md)

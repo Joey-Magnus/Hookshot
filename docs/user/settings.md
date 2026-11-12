@@ -112,7 +112,7 @@ Screen, HDR, Detail, and GPU and memory (the rows to change when something is wr
 | Frame pacing | Off, On | Off | **On** shows frames at an even interval: less stutter, with up to one frame of extra delay. **Off** shows each one as soon as it's ready |
 | Game frame rate cap | 60 (the console's), 90, 120, 144, 165, 240, Uncapped | 60 (the console's) | The most frames the game itself draws each second. Frame generation adds frames on top. Above 60 is experimental: the game keeps the right speed, but some cutscenes and bosses (such as Gohma) can misbehave. **Uncapped** runs as fast as your PC can, still limited by the display with V-Sync on. Applies after a restart |
 | NVIDIA Reflex | Off, On, On + Boost | Off | Lowers input delay by starting each frame as late as possible. **On + Boost** also keeps the card's clocks up. Works with frame generation. Shown only on NVIDIA cards whose driver supports it |
-| AMD Anti-Lag 2 | Off, On | Off | Lowers input delay by starting each frame as late as possible. Not used while frame generation is on. Shown only on AMD cards whose driver supports it |
+| AMD Anti-Lag 2 | Off, On | Off | Lowers input delay by starting each frame as late as possible. Works with frame generation too. Shown only on AMD cards whose driver supports it |
 
 **Screen**
 
@@ -184,9 +184,19 @@ FSR 4 its Native AA. It's the sharpest and the heaviest choice. At 100%, FSR 3.1
 | Text speed | Normal, 2x, 4x, Instant | Normal | How fast dialogue and other messages print. **Instant** shows each page at once |
 | Text size | Original, 110%, 125%, 150%, 175% | Original | How large dialogue, Navi's text and signs are drawn |
 | Microphone | Off, Default, or each microphone by name | Default | What the game hears when you use its microphone option (playing an instrument or humming). **Default** is your system's recording device. On Windows, desktop apps must be allowed to use the microphone (Settings, Privacy & security). An unplugged microphone stays chosen, and Default stands in until it's back |
+| Game language | The game's 16 languages, each by its own name | The one you built with | The language of the game's own text. It's saved in `language.txt` in the game folder when you leave the row. Applies after a restart |
+| Menu language | Auto, English, Português (Brasil), Español (Latinoamérica), Español (España), Français, Deutsch, Italiano, Nederlands, Polski, Русский, 日本語, 한국어, 简体中文, 繁體中文 | Auto | The language of this menu. **Auto** follows the language the game runs in. The translations are machine-made, so corrections from speakers are welcome; place and item names stay in English for now |
 | Discord status | Off, On | On | Shows "Playing Hookshot" and your play time in your Discord status, while Discord runs on this PC |
+| Skip opening | Off, On | Off | Skips a new game's opening: the story movie and Navi waking Link. The title screen, later cutscenes and the meeting with the Great Deku Tree still play |
+| Bug report | | | Saves what a bug report needs into a new folder in `bug-reports` in the game folder. Nothing is sent. See [collecting what we need for a bug report](troubleshooting.md#collecting-what-we-need-for-a-bug-report) |
 | Restart | | | Starts the game again. Press Enter or A twice to confirm; Esc or B cancels. Save first |
 | Quit | | | Closes the game. Press Enter or A twice to confirm; Esc or B cancels. Save first |
+
+**Languages.** `HOS_LANGUAGE` in [`hookshot_env.txt`](troubleshooting.md#hookshot_envtxt), when set, wins over the
+Game language row and `language.txt`. Where the game folder can't be written, the row goes back to the file's
+language. With Menu language on **Auto**, English (UK) and French (Canada) take English and French. Japanese, Chinese
+and Korean letters come from the game's own fonts for them, with Windows' (Yu Gothic, Microsoft YaHei, Microsoft
+JhengHei, Malgun Gothic) or Linux's Noto CJK where a game font lacks one.
 
 ## Controls
 
@@ -197,7 +207,7 @@ Setting up buttons and keys is covered in [controls](controls.md).
 | Setting | Choices | Default | What it does |
 |---|---|---|---|
 | Controller in background | Off, On | Off | **On** lets the controller play the game while another window is in front, for streaming or other apps. The keyboard and mouse always need the game's window |
-| Mouse camera | As the stick, Native | As the stick | How the mouse turns the camera. **As the stick** treats the mouse like the right stick. **Native** turns the camera directly, one to one, as in a PC game |
+| Mouse camera | As the stick, Native | As the stick | How the mouse turns the camera. **As the stick** treats the mouse like the right stick. **Native** turns the camera directly, one to one, as in a PC game. When another camera takes over, Native leaves it alone, and afterwards picks up from wherever the game's camera points |
 | Disable camera centering | Off, On | Off | **On** stops the camera slowly swinging round behind you as you move. Useful with Native mouse camera. Manual camera control and recentering still work |
 | Mouse sensitivity | 0.10 to 5.00, in steps of 0.10 | 1.00 | How far the camera turns for a mouse movement, with either mouse camera. The **-** and **=** keys change it while playing |
 | Invert mouse vertical | Off, On | Off | Swaps up and down for the mouse |
@@ -232,7 +242,7 @@ These two rows sit above the button grid on the Controls page.
 | Setting | Choices | Default | What it does |
 |---|---|---|---|
 | Layout preset | Nintendo, Xbox / PC, Swap Face, Custom | Nintendo | Which face button is which. **Nintendo** is the Switch's order. **Xbox / PC** puts A at the bottom and B on the right. **Swap Face** swaps only A and B. Binding a button yourself makes it **Custom** |
-| Button prompts | Auto, Switch, Xbox, PlayStation 4, PlayStation 5, Steam Deck | Auto | The button icons the game shows in its text and menus. **Auto** follows your first controller, and shows Switch icons when it can't tell. Applies after a restart |
+| Button prompts | Auto, Switch, Xbox, PlayStation 4, PlayStation 5, Steam Deck, Keyboard | Auto | The button icons the game shows in its text, hints and menus. **Auto** follows your first controller, and the keyboard when none is connected. **Keyboard** shows the key or mouse button your controls put each action on, and WASD and the mouse for the sticks; the ocarina's notes and the pause menu's controller keep the Switch's buttons. Applies after a restart |
 
 ## Debug
 
@@ -263,6 +273,10 @@ puts away flight, the free camera and heart protection, and returns Link to his 
 | Teleport | Opens a list of areas. Link travels there through the game's own area change, at his current age |
 | Mark position | Remembers where Link stands in the current area |
 | Return to mark | Moves Link back to the marked position in the current area |
+
+A save whose minimap stopped showing after a Teleport on an earlier version is mended by the Teleport itself: teleport
+to an outdoor area, wait until you can move, then save from the game's System menu. The minimap then stays after a
+restart.
 
 **Camera & world**
 

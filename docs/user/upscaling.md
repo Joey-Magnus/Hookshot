@@ -36,7 +36,7 @@ DLSS uses NVIDIA's files, which Hookshot can't ship. The builder downloads them 
    game**. On Windows it shows NVIDIA's license first; the box stays ticked only if you accept.
 2. After the build, choose **NVIDIA DLSS** in the Upscaler row.
 
-A game you've already built without it needs building again with the box ticked. Updates keep it.
+The build puts DLSS's runtime and DLSS Frame Generation's in the game folder's `ngx` folder. A game you've already built without it needs building again with the box ticked. Updates keep it.
 
 NVIDIA's files stay on your PC. Don't share a game folder that was built with them.
 
@@ -74,7 +74,8 @@ When you measure performance, turn Frame generation off so the frame counter sho
 press shows up sooner. Each row only appears if your card and driver support it.
 
 - Reflex works with frame generation too. **On + Boost** also keeps the card's clocks up.
-- Anti-Lag 2 isn't used while Frame generation is on.
+- Anti-Lag 2 works with frame generation too: each of the game's own frames is timed from when it is shown, not from
+  the generated frames before it.
 
 ## Is it working?
 

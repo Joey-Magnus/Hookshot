@@ -82,6 +82,9 @@ scripts/linux/deps.sh
 export EMSDK=$PWD/build-linux/deps/emsdk RX_CPM=$PWD/build-linux/deps/cpm
 ```
 
+The scripts expect Ubuntu 22.04; on another distribution, [the AppImage](#the-appimage) section has a container that
+runs them in it.
+
 Or use your distribution's packages:
 
 - `clang` and `lld`. LLVM 23 or newer reads the play profile; an older one builds without it.
@@ -138,6 +141,20 @@ The packaged builders put the game in `bin/` and a launcher in its place.
 After a build, `make_game.py` deletes the build files in the work folder except this build's compiled objects, so the
 next build compiles only what changed. `HOOKSHOT_KEEP_BUILD_FILES=1` keeps everything. A work folder that is the clone's
 own `work/` is always kept.
+
+### Button prompts in source builds
+
+A source-checkout build keeps the button prompts when their source, fonts, game assets, button tables, image
+overrides, Python, package and library versions and generation options still match, and every generated file still has
+its recorded size and content hash. The inputs are checked before and after generation; changed or unreadable inputs
+leave no reusable stamp. The log says `prompts: unchanged, kept` or why it regenerated. `HOOKSHOT_FORCE_PROMPTS=1`
+regenerates them anyway.
+
+Packaged builders (the finish stage's launcher path) still regenerate every time; `RX_RELEASE` does not tell them
+from source builds. Generation uses a fresh folder and publishes only a complete set. A failed generator still removes
+the prompts, so the game shows its own icons. An interrupted build can leave the old set without a stamp; the next
+build regenerates it. The files the game derives at run time are cleared by every build, a kept set included; they
+are not part of the stamp, and if they can't be cleared, the build regenerates rather than trust them.
 
 ## Building in stages
 
@@ -199,12 +216,20 @@ built with it.
    each file is checked against its SHA-256.
 
    ```sh
-   python -I scripts/ngx_sdk.py --platform windows C:\path\ngx-sdk   # headers, nvsdk_ngx_s.lib, nvngx_dlss.dll
-   scripts/linux/ngx-sdk.sh ~/ngx-sdk                                # Linux: libnvsdk_ngx.a, libnvidia-ngx-dlss.so.<version>
+   python -I scripts/ngx_sdk.py --platform windows C:\path\ngx-sdk   # headers, nvsdk_ngx_s.lib, nvngx_dlss.dll, nvngx_dlssg.dll
+   scripts/linux/ngx-sdk.sh ~/ngx-sdk                                # Linux: libnvsdk_ngx.a, libnvidia-ngx-dlss.so.<version>, libnvidia-ngx-dlssg.so.<version>
    ```
 
-2. Build with `HOOKSHOT_NGX_SDK` set to that folder. `make_game.py` puts DLSS's runtime in the game folder's `ngx`
-   folder.
+2. Build with `HOOKSHOT_NGX_SDK` set to that folder. `make_game.py` puts both runtimes, DLSS's and DLSS Frame
+   Generation's, in the game folder's `ngx` folder. Without the frame generation runtime there, frame generation takes
+   the driver's own copy, which may be older: one that makes 1 frame at most, or refuses every set.
+
+NGX also looks in `%LOCALAPPDATA%\Hookshot\ngx` (Linux: `$XDG_DATA_HOME/hookshot/ngx`) and in `RX_VK_DLSS_DIR`, and
+uses the newest of each runtime it finds across them; to try a given one, make sure no other folder has a newer one.
+On Linux NGX loads the runtimes only from a folder whose whole path is ASCII, so a game in a folder such as
+`~/Games/Zelda-Café` can't use its own `ngx` folder (the log and the menu say so): copy `libnvidia-ngx-dlss.so.*` and
+`libnvidia-ngx-dlssg.so.*` into `~/.local/share/hookshot/ngx`, or any folder with an ASCII path named in
+`RX_VK_DLSS_DIR`.
 
 `make_game.py --fetch-ngx-sdk --accept-nvidia-license` does both in one run, into `HOOKSHOT_NGX_SDK`.
 
@@ -217,7 +242,7 @@ A change to the pinned SDK release updates the file table and SHA-256s in `scrip
 `tests/test_ngx_sdk.py`, and the release named in the builder's license text
 (`builder/HookshotBuilder/MainWindow.xaml.cs`).
 
-How players turn DLSS on, and where the game looks for the runtime, is in [upscaling](../user/upscaling.md).
+How players turn DLSS on is in [upscaling](../user/upscaling.md).
 
 ## AMD FSR 4
 
@@ -249,6 +274,20 @@ player's PC compiles only the game. It carries `work/`'s play profile when the c
 `assets/pipeline_states/` holds no list. CI builds it on Ubuntu 22.04: the sysroot it carries is that system's C
 library, so the game it builds runs on glibc 2.35 and newer. It needs a CPU with AVX2 and a Vulkan 1.3 driver with
 mesh shaders.
+
+The scripts expect that same Ubuntu 22.04. On another distribution, build it in a container with that system (Docker
+or Podman, `DOCKER=podman`):
+
+```sh
+scripts/linux/docker.sh             # deps.sh, then appimage.sh, in scripts/linux/Dockerfile's Ubuntu 22.04
+scripts/linux/docker.sh shell       # a shell in that environment, with the checkout at /src
+```
+
+The AppImage lands in `build-linux/` as above. The container keeps its own `build-linux/docker-deps` and
+`build-linux/docker-vk-work`: parts built on the host link against its newer glibc and would not load on older
+systems. The Dockerfile's packages are the workflow's (`tests/test_linux_docker_packages.py` checks that they stay the
+same). Where SELinux is enforcing (Fedora, RHEL), the script runs the container with `--security-opt label=disable`:
+the checkout is not labelled for containers, and relabelling it with `:z` would change it on the host.
 
 The system libraries copied into the sysroot are copied by value: an absolute symlink on the build machine becomes a
 real file. The updater rebases absolute links only in sysroot parts from older releases, when their targets resolve
@@ -397,6 +436,7 @@ for the build they start.
 | `RX_MARCH=<level>` | The CPU level: `x86-64-v3`, `x86-64-v2` or `x86-64`. Default: the best this CPU runs |
 | `RX_VK_ONLY=1` | Build only the Vulkan back end, with no lift |
 | `HOOKSHOT_KEEP_BUILD_FILES=1` | Keep the lifted C and every object after a `make_game.py` build |
+| `HOOKSHOT_FORCE_PROMPTS=1` | Regenerate the button prompts even when unchanged ([above](#button-prompts-in-source-builds)) |
 | `HOOKSHOT_NGX_SDK=<dir>` | Build with NVIDIA's DLSS SDK from that folder |
 | `HOOKSHOT_FSR=1` | `build.py`: the Vulkan back end with AMD FSR 4 (`make_game.py --fsr` sets it) |
 | `HOOKSHOT_FFX_SDK=<dir>` | Where `--fetch-fsr-runtime` keeps AMD's runtime |

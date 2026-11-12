@@ -76,6 +76,11 @@ A controller button you give to another Switch button swaps with it, so no butto
 give to another control is taken away from the one that had it. The movement and camera rows (**Move forward**,
 **Camera up** and so on) are keyboard only. Mouse buttons can be bound to keys too.
 
+**Ocarina notes.** Five rows, **Ocarina note (L)**, **(R)**, **(A)**, **(Y)** and **(X)**, are empty by default, and
+the ocarina then plays with the game's own buttons. Bind a note to a key or controller button of your own and, while
+the game waits for a note, that note answers only to it. A dialogue or cutscene that takes the buttons ends the wait,
+and a song lesson keeps the game's own buttons too.
+
 The page saves your controls at once, in `hookshot_options.ini` in the game folder. Updates keep them.
 
 **The two settings at the top of the page:**
@@ -83,7 +88,7 @@ The page saves your controls at once, in `hookshot_options.ini` in the game fold
 | Setting | Choices | What it does |
 |---|---|---|
 | Layout preset | **Nintendo (Def)**, Xbox / PC, Swap Face, Custom | Where A, B, X and Y sit on the controller. **Nintendo**: as on the Switch, A right, B bottom, X top, Y left. **Xbox / PC**: A bottom, B right, X left, Y top. **Swap Face**: A bottom, B right, X and Y as on the Switch. Changing a face button yourself makes it **Custom** |
-| Button prompts | **Auto**, Switch, Xbox, PlayStation 4, PlayStation 5, Steam Deck | The button icons the game shows in its texts and menus. They follow your controls, so if you move an action to another button, the icon changes with it. **Auto** uses the icons of the first controller connected, or the Switch's if the game can't tell what it is. Most of the change shows at once; a few icons change at the next start |
+| Button prompts | **Auto**, Switch, Xbox, PlayStation 4, PlayStation 5, Steam Deck, Keyboard | The button icons the game shows in its texts, hints and menus. They follow your controls, so if you move an action to another button, the icon changes with it. **Auto** uses the icons of the first controller connected, and the keyboard's when none is. **Keyboard** shows the key or mouse button each action is on (the first of its two), and WASD and the mouse for the sticks; the ocarina's notes and the pause menu's controller keep the Switch's buttons. Most of the change shows at once; a few icons change at the next start |
 
 ## The Controls tab
 
@@ -115,7 +120,8 @@ camera, and its buttons count as the keys they're bound to (Y and ZL by default)
 - **As the stick** (default): the mouse moves the right stick, with the stick's curve and top speed. The camera settles
   smoothly when you stop.
 - **Native**: the mouse turns the camera itself, one to one, as in most PC games. **Disable camera centering** goes
-  well with it.
+  well with it. When another camera takes over, Native leaves it alone; afterwards the mouse
+  picks up from wherever the game's camera points, rather than going back to the old view.
 
 **In the game's own menus** (Windows): the title screen and its file list, the pause menu, the Key Items, Threads of
 Time and Map pages, the options and the save dialogs free the mouse while they're open. Point at an entry to select
@@ -196,6 +202,7 @@ are 1 (left), 2 (right), 4 (middle), 5 and 6 (side buttons); they count while th
 
 The buttons are `a` `b` `x` `y` `l` `r` `zl` `zr` `plus` `minus` `ls` `rs` `left` `up` `right` `down`. For keys only,
 there are also the movement and camera directions: `move_up` `move_down` `move_left` `move_right` `cam_up` `cam_down`
-`cam_left` `cam_right`.
+`cam_left` `cam_right`. The ocarina's five notes take both a `pad_` and a `key_` line: `note_l` `note_r` `note_a`
+`note_y` `note_x`.
 
 </details>

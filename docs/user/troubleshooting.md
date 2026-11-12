@@ -14,6 +14,25 @@ section says what to include.
 
 ## Collecting what we need for a bug report
 
+**The Bug report row.** The in-game menu's **Gameplay → Bug report** gathers what a report needs in one press. It
+writes a new folder, `bug-reports/<date>_<time>`, in the game folder, and the row then shows the folder's name. In it:
+
+- `report.txt` answers the [game problem form](https://github.com/NotRexed/Hookshot/issues/new?template=1-game-problem.yml)'s
+  questions: the version, the area you're in, your graphics card and driver, CPU, RAM and system, and the menu options
+  and `RX_`/`HOS_` switches you changed. It ends with a link that opens the form with those filled in (the switches by
+  name only).
+- `hookshot_log.txt`, this run's log so far, and `hookshot_log.1.txt`, the run before's, which has the crash if the
+  game crashed last time.
+- `picture.png`, the game's picture without the menu.
+
+Your home folder is written as `~` (`%USERPROFILE%` on Windows) and your user name as `<user>` in the logs' paths. A
+switch's value is kept only when it's a number, a size or on/off, and never for a name with `TOKEN`, `KEY`, `ROOM`,
+`SECRET`, `PASS`, `SERVER` or `USER` in it; other values read `(value left out)`. Nothing else goes in: no saves, no
+game files, not `hookshot_options.ini` or `hookshot_env.txt` themselves. Nothing is sent, either: open the form, write
+what happened, and drag the folder's files into it (from File Explorer on Windows or a file manager on Linux; on a
+Steam Deck, in Desktop Mode). If the game stops before its menu can be used, its log is kept as `hookshot_log.1.txt`:
+start it again and use the row, or attach that file yourself.
+
 **The game's log.** `hookshot_log.txt` in the game folder holds the last run. The four runs before it are kept as
 `hookshot_log.1.txt` (the most recent) to `hookshot_log.4.txt`, so if you started the game again after a crash, the
 crash is in `hookshot_log.1.txt`. If you start the game from a terminal, it prints the log there instead.
@@ -46,7 +65,7 @@ not the `.nup`, not `romfs` or `exefs`, and not the built game folder.
 | "Hookshot supports build e0f3ccfa" or "This version isn't supported" | Your game isn't the supported version. Check that you chose the right game with update v131072 installed (see [What you need](install.md#what-you-need)) |
 | The game opens and closes, or the log says "device lost" | Update your graphics driver. If it keeps happening, try **Mesh shaders: Compute** on the Graphics tab, then restart |
 | Steam Deck: the game freezes and closes in Kokiri Forest or inside the Great Deku Tree, and `journalctl -k` shows `gfx_0.0.0 timeout` | Add `RX_VK_MESH_NOCULL=2c56dc1006942f74` to [`hookshot_env.txt`](#hookshot_envtxt). Everything is still drawn. `RX_VK_SKIP_CODE=2c56dc1006942f74` also avoids the freeze, but some models go missing |
-| The game is in the wrong language | Open `language.txt` in the game folder, change the code to one of those listed in it, save, and start the game again. Updates keep the language you set |
+| The game is in the wrong language | Set **Game language** on the [Gameplay tab](settings.md#gameplay) and restart. Or open `language.txt` in the game folder, change the code to one of those listed in it, save, and start the game again. Updates keep the language you set |
 
 ## Picture problems
 
@@ -71,6 +90,10 @@ artifacts only; it doesn't change lighting. To undo it, set the row back to **Of
 
 `RX_VK_ASTC_RGBA8=1` in [`hookshot_env.txt`](#hookshot_envtxt) does the same. While that line is there, the menu row
 shows "Set by RX_VK_ASTC_RGBA8" and can't be changed; remove the line to choose in the menu again.
+
+`RX_VK_ASTC_BC7=1` is a lighter alternative: it keeps those big textures as BC7 instead of BC3. Both take 8 bits a
+texel, so the video memory is the same, but BC7 keeps colour gradients and transparency much better, so textures look
+cleaner where BC3 shows bands or blocks. It's off unless set, and `RX_VK_ASTC_RGBA8=1` wins when both are set.
 
 ## Performance and stutter
 
