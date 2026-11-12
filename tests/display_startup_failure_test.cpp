@@ -21,7 +21,6 @@ static int sdl_ready, start_asked, visible_window_started;
 static int game_argc, game_token, event_token;
 static char** game_argv;
 static int hos_posix_window[4];
-static volatile int desktop_w, desktop_h;   // (the desktop's size the loop keeps for the renderer: the Quality preset Auto (this PC))
 [[maybe_unused]] static HANDLE renderer_up;
 static void* window;
 float hos_aspect_ratio = 16.0f / 9;
