@@ -193,8 +193,8 @@ static std::string ini_file;
 static std::string ini_path() { return ini_file; }
 static int parse_output(const char*) { return 0; }
 static std::string mic_want;
-static uint64_t auto_for = 0, auto_tuned = 0;   // (the Quality preset Auto (this PC)'s fingerprints, which save() writes)
-static int auto_output = -1;   // (and the Output resolution it set)
+[[maybe_unused]] static uint64_t auto_for = 0, auto_tuned = 0;   // (the Quality preset Auto (this PC)'s fingerprints, which save() writes)
+[[maybe_unused]] static int auto_output = -1;   // (and the Output resolution it set)
 static struct { int steps = 0; bool went_down = false; } auto_tuning;   // (and its tuning's steps)
 static std::string mic_key(const char* name) { return name; }
 static void mic_tell_host() {}
