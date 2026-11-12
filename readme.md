@@ -320,7 +320,7 @@ HDR, Detail, and GPU and memory (last: the rows to change when something is wron
 
 | Tab | Option | Choices | Default |
 |---|---|---|---|
-| Graphics | Quality preset | Custom, Minimum (4GB), Low (6GB), Balanced (8GB), High (12GB), Ultra (16GB+) | Custom |
+| Graphics | Quality preset | Custom, Minimum (4GB), Low (6GB), Balanced (8GB), High (12GB), Ultra (16GB+), Auto (this PC) | Auto (this PC) on a first start; Custom in an options file from before it |
 | | Output resolution | 1920x1080, 2048x1152, 2560x1440, 3840x2160, 5120x1440, 5120x2880 (after a restart) | 2048x1152 |
 | | Profile | Docked, Handheld (after a restart) | Docked |
 | | Upscaler | Game's own, NVIDIA DLSS, NVIDIA DLAA (only in builds with NVIDIA's DLSS SDK, below; DLSS and DLAA on RTX GPUs), AMD FSR 3.1 (every build, on GPUs it runs on, below), AMD FSR 4, AMD FSR 4 Native AA (only in builds with FSR 4, below), Off (no upscaling) | Game's own |
@@ -383,6 +383,13 @@ HDR, Detail, and GPU and memory (last: the rows to change when something is wron
   and the video memory limits for a card with that much memory. It leaves the Upscaler and Frame generation as
   you chose them: with DLSS, FSR 3.1 or FSR 4, the preset's resolution becomes their nearest mode. Changing most other
   rows yourself sets it back to Custom.
+- **Auto (this PC)**, which a first start begins on, chooses for the PC it runs on: the memory tier from the card's
+  video memory (an integrated GPU, a Steam Deck or a card without mesh shaders at Minimum), DLSS on an NVIDIA RTX card
+  or FSR 4 on an AMD RX 9000 where the build has them (else the game's own upscaler), and the screen's size as the
+  Output resolution where the tier has the memory for it. In the first minute of play it then measures the GPU and moves
+  the Render resolution down a step while the GPU takes over 90% of the frame (up a step under 50%, never past its own
+  choice; at most two steps). It chooses again when the card or the screen changes. `hookshot_log.txt`'s
+  `Auto (this PC)` lines say what it chose and why.
 - **Menu size** is how large the menu, the FPS counter and the start-up screen are drawn: Medium unless you choose Small
   (a desk) or Large (a TV across the room). It stays the same whether you use a controller or the keyboard and mouse.
 - **Field of view** changes the gameplay camera's vertical angle: 100% keeps the game's view, higher shows more of the
