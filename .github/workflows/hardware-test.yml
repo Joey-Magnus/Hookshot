@@ -1,0 +1,133 @@
+# A pull request's test on a tester's own hardware: a Steam Deck, an AMD, Intel or 8 GB card (docs/hardware-runners.md).
+# Started only by hardware-test-label.yml when a maintainer labels the pull request "hardware: <name>", or by hand by
+# someone with write access; never by pull_request, so a pull request cannot change what runs here.
+#
+# check (GitHub's runner): the commit must still be the pull request's head and still carry the label.
+# run (the tester's runner, labels self-hosted, hookshot-hardware and <name>): no token and no checkout on the runner
+#   itself; the runner owner's sandbox program (HOOKSHOT_HW_SANDBOX) fetches that one commit, builds it with the dump
+#   on that PC, runs the scene with no network, and writes only results.txt and screenshots. The dump never leaves it.
+# report (GitHub's runner): posts results.txt on the pull request as quoted text; it never runs anything from the run.
+# The test waits in GitHub's queue until a runner with that label is online, and is never a check a merge waits for.
+name: Hardware test
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: Pull request number
+        required: true
+        type: number
+      sha:
+        description: The pull request's head commit to test (all 40 characters)
+        required: true
+        type: string
+      hardware:
+        description: The runner label to run on (the part after "hardware:", such as steam-deck or nvidia-8gb)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hardware-test-${{ inputs.pr }}-${{ inputs.hardware }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: The commit is the labelled head
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      pull-requests: read
+    outputs:
+      hardware: ${{ steps.check.outputs.hardware }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ inputs.pr }}
+          SHA: ${{ inputs.sha }}
+          HARDWARE: ${{ inputs.hardware }}
+        run: |
+          [[ "$HARDWARE" =~ ^[a-z0-9][a-z0-9-]{0,31}$ ]] || { echo "::error::hardware: lowercase letters, digits and dashes only"; exit 1; }
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::sha: the full 40-character commit"; exit 1; }
+          # (HARDWARE is checked above to be [a-z0-9-] only, so it can stand in the jq expression)
+          read -r state head labelled < <(gh pr view "$PR" --json state,headRefOid,labels \
+            --jq '"\(.state) \(.headRefOid) \([.labels[].name | select(startswith("hardware:")) | ltrimstr("hardware:") | ltrimstr(" ")] | any(. == "'"$HARDWARE"'"))"')
+          [ "$state" = OPEN ] || { echo "::error::pull request #$PR is $state"; exit 1; }
+          [ "$head" = "$SHA" ] || { echo "::error::#$PR's head is now $head, not $SHA: label it again after looking at the new commits"; exit 1; }
+          [ "$labelled" = true ] || { echo "::error::#$PR has no \"hardware: $HARDWARE\" label"; exit 1; }
+          echo "hardware=$HARDWARE" >> "$GITHUB_OUTPUT"
+
+  run:
+    name: Test on ${{ needs.check.outputs.hardware }}
+    needs: check
+    runs-on: [self-hosted, hookshot-hardware, "${{ needs.check.outputs.hardware }}"]
+    timeout-minutes: 120
+    permissions: {}
+    steps:
+      - name: Run the commit in the runner's sandbox
+        env:
+          PR: ${{ inputs.pr }}
+          SHA: ${{ inputs.sha }}
+          OUT: ${{ runner.temp }}/hardware-test
+        run: |
+          if [ -z "${HOOKSHOT_HW_SANDBOX:-}" ] || [ ! -x "$HOOKSHOT_HW_SANDBOX" ]; then
+            echo "::error::this runner has no sandbox (HOOKSHOT_HW_SANDBOX, docs/hardware-runners.md); a pull request's code does not run on it outside one"
+            exit 1
+          fi
+          rm -rf "$OUT" && mkdir -p "$OUT"
+          "$HOOKSHOT_HW_SANDBOX" --repo "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" --sha "$SHA" --pr "$PR" --out "$OUT"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: hardware-test-${{ needs.check.outputs.hardware }}
+          path: |
+            ${{ runner.temp }}/hardware-test/results.txt
+            ${{ runner.temp }}/hardware-test/*.png
+          if-no-files-found: warn
+          retention-days: 14
+
+  report:
+    name: Post the results on the pull request
+    needs: [check, run]
+    if: always() && needs.check.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        continue-on-error: true
+        with:
+          name: hardware-test-${{ needs.check.outputs.hardware }}
+          path: results
+      - name: Comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ inputs.pr }}
+          SHA: ${{ inputs.sha }}
+          HARDWARE: ${{ needs.check.outputs.hardware }}
+          OUTCOME: ${{ needs.run.result }}
+        run: |
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          shots=$(find results -maxdepth 1 -name '*.png' 2>/dev/null | wc -l)
+          {
+            echo "Hardware test on \`$HARDWARE\` for $SHA: **$OUTCOME** ([run]($run_url), $shots screenshots in its artifacts)."
+            echo
+            if [ -f results/results.txt ]; then
+              echo "<details><summary>results.txt, as the runner wrote it</summary>"
+              echo
+              echo '````text'
+              # (the runner's text is untrusted: no fence of its own can end this one, and no @mention pings anyone)
+              head -c 60000 results/results.txt | sed -e 's/````/` ` ` `/g' -e 's/@/@\xe2\x80\x8b/g'
+              echo '````'
+              echo "</details>"
+            else
+              echo "The runner wrote no results.txt."
+            fi
+          } > comment.md
+          gh pr comment "$PR" --body-file comment.md

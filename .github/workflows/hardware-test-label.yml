@@ -1,0 +1,63 @@
+# Starts a pull request's test on a tester's own hardware (self-hosted runners, docs/hardware-runners.md) when a
+# maintainer puts a "hardware: <name>" label on it, and takes those labels off when new commits arrive, so a test only
+# ever runs on a commit someone looked at. The pull request's code is never checked out here, and the test itself runs
+# from the default branch's hardware-test.yml (workflow_dispatch), never from the pull request's copy of it: that is
+# what makes pull_request_target safe for pull requests from forks. Only people with triage access can add labels.
+# No game data is involved.
+name: Hardware test gate
+
+on:
+  pull_request_target:
+    types: [labeled, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch:
+    name: Start the hardware test for the labelled commit
+    if: github.event.action == 'labeled' && startsWith(github.event.label.name, 'hardware:')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch hardware-test.yml from the default branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: ${{ github.event.repository.default_branch }}
+          LABEL: ${{ github.event.label.name }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          hardware="${LABEL#hardware:}"
+          hardware="${hardware# }"
+          if ! [[ "$hardware" =~ ^[a-z0-9][a-z0-9-]{0,31}$ ]]; then
+            echo "::error::label \"$LABEL\": the hardware name after \"hardware: \" must be lowercase letters, digits and dashes"
+            exit 1
+          fi
+          gh workflow run hardware-test.yml --ref "$BRANCH" -f pr="$PR" -f sha="$SHA" -f hardware="$hardware"
+          echo "dispatched: PR #$PR at $SHA on \"$hardware\""
+
+  unlabel:
+    name: New commits take the hardware labels off
+    if: github.event.action == 'synchronize'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Remove the hardware labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          labels=$(gh pr view "$PR" --json labels --jq '.labels[].name | select(startswith("hardware:"))')
+          [ -n "$labels" ] || exit 0
+          while IFS= read -r label; do
+            gh pr edit "$PR" --remove-label "$label"
+          done <<< "$labels"
+          gh pr comment "$PR" --body "New commits, so the hardware test labels came off. A maintainer puts them back after looking at the new commits; the test then runs on that head ($SHA or later)."

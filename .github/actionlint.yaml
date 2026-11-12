@@ -1,0 +1,4 @@
+# Testers' self-hosted runners (docs/hardware-runners.md); each also carries its hardware's name, which is not listed.
+self-hosted-runner:
+  labels:
+    - hookshot-hardware
