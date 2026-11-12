@@ -5,5 +5,5 @@ launcher's tests read them, so the two sides agree.
 - `builder-settings.json` + `import-windows.json`: what the Windows Builder saved, and the import file it hands over
   for a folder whose `hookshot_version.txt` says `version=v2.3.0-rc.2`, whose `language.txt` says `fr-FR`, and with
   `work.txt` holding `D:\HookshotWork`.
-- `builder.ini` + `import-linux.json`: the same for the Linux Builder, a folder stamped `version=v2.3.0-4-g1a2b3c4`
+- `builder.ini` + `import-linux.json`: the same for the Linux Builder, a folder stamped `version=nightly-2025-1a2b3c4d`
   (no saved track: the track comes from the version).

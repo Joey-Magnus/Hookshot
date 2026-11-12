@@ -997,16 +997,19 @@ class Builder(tk.Tk):
                             % ("with" if self.dlss.get() else "without"))
         elif self.mode == "update-game":
             self.status.set("Hookshot %s is available. Your game is %s. Update downloads only what changed, then compiles what changed."
-                            % (target, game))
+                            % (linux_update.shown(target), linux_update.shown(game)))
+        elif self.mode == "up-to-date" and linux_update.other_track(target, game):
+            self.status.set("Your game is %s, on another update track than %s. Play keeps this version; choose its track "
+                            "under Update track to update it." % (linux_update.shown(game), linux_update.shown(target)))
         elif self.mode == "up-to-date" and linux_update.older_version(target, game):
             self.status.set("Your game is %s, newer than this builder's update target %s. Play keeps this version; "
-                            "choose another update track to change versions." % (game, target))
+                            "choose another update track to change versions." % (linux_update.shown(game), linux_update.shown(target)))
         elif self.mode == "up-to-date" and self.latest is None:
-            self.status.set("Your game is %s, as this builder. GitHub did not answer, so newer versions could not be checked." % game)
+            self.status.set("Your game is %s, as this builder. GitHub did not answer, so newer versions could not be checked." % linux_update.shown(game))
         elif self.mode == "up-to-date":
-            self.status.set("%s is the latest version." % game)
+            self.status.set("%s is the latest version." % linux_update.shown(game))
         elif self.mode == "update-builder":
-            self.status.set("Hookshot Builder %s is available (this one is %s). Update it first, then build." % (target, self.tools or "this one"))
+            self.status.set("Hookshot Builder %s is available (this one is %s). Update it first, then build." % (linux_update.shown(target), linux_update.shown(self.tools) or "this one"))
         else:
             self.status.set("")
 
@@ -1016,13 +1019,15 @@ class Builder(tk.Tk):
         game, kept = linux_update.game_version(self.launch_folder)
         target = linux_update.update_target(self.latest, self.tools, self.switching())
         show = False
-        if not self.switching() and linux_update.older_version(target, game):
-            self.launch_status.set("Your game is %s, newer than this builder's update target %s. Play keeps this version." % (game, target))
+        if not self.switching() and linux_update.other_track(target, game):
+            self.launch_status.set("Your game is %s, on another update track than %s. Play keeps this version." % (linux_update.shown(game), linux_update.shown(target)))
+        elif not self.switching() and linux_update.older_version(target, game):
+            self.launch_status.set("Your game is %s, newer than this builder's update target %s. Play keeps this version." % (linux_update.shown(game), linux_update.shown(target)))
         elif target and game and game != target and kept:
-            self.launch_status.set("Update available: %s" % target)
+            self.launch_status.set("Update available: %s" % linux_update.shown(target))
             show = True
         elif target and game and game != target:
-            self.launch_status.set("%s is out. Build this folder again with Hookshot Builder to get it." % target)
+            self.launch_status.set("%s is out. Build this folder again with Hookshot Builder to get it." % linux_update.shown(target))
         elif game and self.latest is None:
             self.launch_status.set("Up to date with this builder (GitHub did not answer)")
         elif game:
@@ -1040,7 +1045,7 @@ class Builder(tk.Tk):
         page = self.page = ttk.Frame(self)
         page.pack(fill="both", expand=True)
         game, _kept = linux_update.game_version(folder)
-        self.header(page, chip=game)
+        self.header(page, chip=linux_update.shown(game))
         # (the Windows launcher's page: the game's name in the middle, Update beside Play when there is one, the folder below)
         f = ttk.Frame(page, padding=(px(48), px(24), px(48), px(56)))
         f.pack(fill="both", expand=True)
@@ -1076,10 +1081,13 @@ class Builder(tk.Tk):
         self.lookup_latest()
 
     def older_ok(self, target, have):
-        """Ask before any known downgrade, including a rebuild after changing DLSS on the same track."""
+        """Ask before any known downgrade, including a rebuild after changing DLSS on the same track, and before a change
+        of track (a nightly and a release, which are not ordered: linux_update.other_track)."""
+        if linux_update.other_track(target, have):
+            return messagebox.askyesno("Hookshot", "%s is on another update track than %s, the version you have now. Install %s in its place?" % (linux_update.shown(target), linux_update.shown(have), linux_update.shown(target)))
         if not linux_update.older_version(target, have):
             return True
-        return messagebox.askyesno("Hookshot", "%s is older than %s, the version you have now. Install %s?" % (target, have, target))
+        return messagebox.askyesno("Hookshot", "%s is older than %s, the version you have now. Install %s?" % (linux_update.shown(target), linux_update.shown(have), linux_update.shown(target)))
 
     def begin_update(self, folder=None):
         folder = self.update_folder if folder is None else folder
@@ -1090,7 +1098,8 @@ class Builder(tk.Tk):
         if folder and not approved and not self.older_ok(target, have):
             return   # (before changing pages or starting any download/build, including the launcher button)
         self.allow_downgrade_from = None   # (the handoff's consent is for this attempt and these two versions)
-        downgrade_from = have if linux_update.older_version(target, have) else None
+        # (the consent the new builder is handed, so it does not ask again: a downgrade's or a change of track's)
+        downgrade_from = have if linux_update.asks_first(target, have) else None
         if folder is not None:
             self.update_folder = folder
         self.show_progress("Updating your game" if self.update_folder else "Updating Hookshot Builder")

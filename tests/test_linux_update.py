@@ -456,30 +456,37 @@ class UpdateTests(unittest.TestCase):
         self.assertEqual(linux_update.choose_mode("v2", "v2", "v2", True, True), "build")
 
     def test_a_build_that_is_not_an_older_release_is_not_made_to_update(self):
-        # (issue 902) an AppImage from the Actions tab is git describe's version, after the latest release: it builds
-        ci = "v2.0.5-3-g1a2b3c4"
+        # (issue 902) an AppImage from the Actions tab is a nightly's version, not ordered with the latest release: it builds
+        ci = "nightly-2029-1a2b3c4d"
         self.assertEqual(linux_update.choose_mode(None, ci, "v2.0.5", False, False), "build")
         self.assertEqual(linux_update.choose_mode(None, "1a2b3c4", "v2.0.5", False, False), "build")
         self.assertEqual(linux_update.choose_mode(None, "dev", "v2.0.5", False, False), "build")
         self.assertEqual(linux_update.choose_mode(None, "v2.0.6", "v2.0.5", False, False), "build")
         self.assertEqual(linux_update.choose_mode(None, "v2.1.0-rc.1", "v2.0.5", False, False), "build")
-        # (its game is played, not taken back to the release; an older game is built again with this builder)
+        # (its game is played, not taken back to the release; a release's game is on another track, so it is played too,
+        # and built again with this builder only once the Track is switched (asked first): docs/versioning.md)
         self.assertEqual(linux_update.choose_mode(ci, ci, "v2.0.5", False, True), "up-to-date")
-        self.assertEqual(linux_update.choose_mode("v2.0.4", ci, "v2.0.5", False, True), "update-game")
+        self.assertEqual(linux_update.choose_mode("v2.0.4", ci, "v2.0.5", False, True), "up-to-date")
         self.assertEqual(linux_update.update_target("v2.0.5", ci), ci)
-        # (a game the release built is older than this Actions builder: its Update builds it again with the builder running,
-        # nothing downloaded, as for any older game)
-        self.assertEqual(linux_update.choose_mode("v2.0.5", ci, "v2.0.5", False, True), "update-game")
+        self.assertEqual(linux_update.choose_mode("v2.0.5", ci, "v2.0.5", False, True), "up-to-date")
+        self.assertEqual(linux_update.choose_mode("v2.0.4", ci, None, False, True, True), "update-game")
+        # (a game no track names, a hash or dev, is built again with this builder, as before)
+        self.assertEqual(linux_update.choose_mode("1a2b3c4", ci, "v2.0.5", False, True), "update-game")
         # an older release still gets the newer one
         self.assertEqual(linux_update.choose_mode(None, "v2.0.4", "v2.0.5", False, False), "update-builder")
         self.assertEqual(linux_update.choose_mode(None, "v2.1.0-rc.1", "v2.1.0", False, False), "update-builder")
         self.assertEqual(linux_update.choose_mode(None, "v2.0.10", "v2.0.9", False, False), "build")
         self.assertEqual(linux_update.choose_mode("v2.0.4", "v2.0.4", "v2.0.5", False, True), "update-game")
         self.assertEqual(linux_update.update_target("v2.0.5", "v2.0.4"), "v2.0.5")
-        # a build from the Actions tab made after an older release is offered the newer one
-        self.assertEqual(linux_update.choose_mode(None, "v2.0.4-3-g1a2b3c4", "v2.0.5", False, False), "update-builder")
-        self.assertEqual(linux_update.choose_mode(None, "v2.0.5-3-g1a2b3c4-dirty", "v2.0.5", False, False), "build")
-        self.assertEqual(linux_update.choose_mode(None, "v2.1.0-rc.1-2-gabc1234", "v2.1.0", False, False), "update-builder")
+        # a nightly older than the nightly's build is offered it (its own track: the nightly, by its count), and so is one
+        # named the old way, by git describe; a changed checkout of the nightly's own commit is not
+        self.assertEqual(linux_update.choose_mode(None, "nightly-2028-1a2b3c4d", "nightly-2029-c544828f", False, False),
+                         "update-builder")
+        self.assertEqual(linux_update.choose_mode(None, "nightly-2029-c544828f-dirty", "nightly-2029-c544828f", False, False),
+                         "build")
+        self.assertEqual(linux_update.choose_mode(None, "nightly-2030-1a2b3c4d", "nightly-2029-c544828f", False, False), "build")
+        self.assertEqual(linux_update.choose_mode(None, "v2.1.0-rc.1-2-gabc1234", "nightly-2029-c544828f", False, False),
+                         "update-builder")
 
     def test_an_rc_build_with_its_own_list_is_not_downgraded_to_the_release(self):
         # (issue 990: a -rc AppImage ships correct tools and a list naming its own parts, while releases/latest is an

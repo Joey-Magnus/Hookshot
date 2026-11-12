@@ -98,7 +98,7 @@ def game_folder(root, list_bytes=None):
     (g / "hookshot_options.ini").write_text("output_res=2560x1440\ndlss=1\nresolution=3\nframe_generation=2\nhdr=0\nultrawide=0\n"
                                             "options_version=4\n", encoding="utf-8")
     (g / "hookshot_log.txt").write_text(
-        "[hos host] hookshot v2.2.0-rc.1-5-gabcdef1 (source 0123abcd)\n"
+        "[hos host] hookshot nightly-2029-abcdef12 (source 0123abcd)\n"
         "[hos host] vk: device 0: Some GPU, Vulkan 1.4, driver 0x9b118180, type 2\n"
         "[hos host] vk: Some GPU, Vulkan 1.4, driver 0x9b118180; mesh shaders yes, host memory import yes, pipeline libraries yes\n"
         "[hos host] vk: driver: SomeDriver 1.2.3\n", encoding="utf-8")
@@ -126,7 +126,7 @@ def check_python(tmp):
     lines = text.splitlines()
     assert [l.split(":")[0] for l in lines] == ["- " + f for f in share.FIELDS], lines
     want = {
-        "Hookshot version": "v2.2.0-rc.1-5-gabcdef1 (source 0123abcd)",
+        "Hookshot version": "nightly-2029-abcdef12 (source 0123abcd)",
         "Output resolution": "2560x1440",
         "Upscaler + render resolution": "NVIDIA DLSS, Quality 67% (1707x960)",
         "Frame generation / HDR": "2x / Off",

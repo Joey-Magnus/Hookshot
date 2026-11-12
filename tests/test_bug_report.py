@@ -33,7 +33,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-VERSION = "v2.1.0-rc.3-39-gbdfe09c (source 763271ad)"
+VERSION = "nightly-1820-bdfe09c4 (source 763271ad)"
 
 DRIVER = r'''#include "vk_bug_report.h"
 #include <atomic>
@@ -289,7 +289,7 @@ def main():
         check("hookshot v2.0.14" in logs and "CRASH: exception 0xc0000005" in logs, "the logs' section: " + logs)
         check("picture.png" in section("Screenshots or video"), "the picture is not named")
         link = report[report.index("https://github.com/NotRexed/Hookshot/issues/new?template=1-game-problem.yml"):].split()[0]
-        for part in ("&version=v2.1.0-rc.3-39-gbdfe09c%20%28source%20763271ad%29", "&gpu=NVIDIA%20GeForce%20RTX%204090",
+        for part in ("&version=nightly-1820-bdfe09c4%20%28source%20763271ad%29", "&gpu=NVIDIA%20GeForce%20RTX%204090",
                      "&where=HyruleField_Child%20%28child%29", "&system=", "&settings=Upscaler", "HOS_HEADLESS", "RX_VK_MENU_SCRIPT"):
             check(part in link, "the link does not fill in " + part)
         check("%3D" not in link and not any(v in link for v in ("93127", "58213", "hunter2", "192.168", "3840x2160", "1%3AINS")),

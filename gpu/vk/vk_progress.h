@@ -74,10 +74,25 @@ inline std::string left_text(double secs) {
     return b;
 }
 
-/// The version line from the build's name (nx2/version.py, "v2.0.5 (source 1a2b3c4d)"): the release alone, "v2.0.5"; a build
-/// between releases ("v2.0.5-2-g619c897-dirty", git describe) shows as "v2.0.5 dev"; anything else as it is
+/// A release name as players see it: the nightly's nightly-2029-c544828f (nightly-<commit count>-<commit>, nx2/version.py) as
+/// "Nightly 2029 · c544828f" (-dirty kept); any other as it is. The log keeps the name itself
+inline std::string release_text(const std::string& name) {
+    size_t d = 8;
+    if (name.compare(0, 8, "nightly-") != 0) return name;
+    while (d < name.size() && d < 17 && name[d] >= '0' && name[d] <= '9') d++;
+    const size_t end = name.size() >= 6 && name.compare(name.size() - 6, 6, "-dirty") == 0 ? name.size() - 6 : name.size();
+    if (d == 8 || d + 9 != end || name[d] != '-') return name;
+    for (size_t h = d + 1; h < end; h++)
+        if (!((name[h] >= '0' && name[h] <= '9') || (name[h] >= 'a' && name[h] <= 'f'))) return name;
+    return "Nightly " + name.substr(8, d - 8) + " \xC2\xB7 " + name.substr(d + 1);
+}
+
+/// The version line from the build's name (nx2/version.py, "v2.0.5 (source 1a2b3c4d)"): the release alone, "v2.0.5"; a nightly
+/// ("nightly-2029-c544828f") as release_text has it, "Nightly 2029 · c544828f"; a build between releases named by git describe
+/// before the nightlies were numbered ("v2.0.5-2-g619c897-dirty") shows as "v2.0.5 dev"; anything else as it is
 inline std::string version_text(std::string name) {
     if (const size_t at = name.find(" ("); at != std::string::npos) name.resize(at);
+    if (const std::string shown = release_text(name); shown != name) return shown;
     size_t i = 0;
     if (name.size() > 1 && name[0] == 'v') {
         int dots = 0;

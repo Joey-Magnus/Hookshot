@@ -608,10 +608,19 @@ static void wanted_tag(char *out, size_t n) {
 /* (an update to a named release reads THAT release's list: the latest/download link can answer with the release before it for a
    while after a publish, and the setup then installed the old version again and started it with --fetched, which builds without
    checking: players pressed Update and stayed on v2.0.3, 2026-11-08) */
-/* (a nightly's version, git describe --long's v2.1.0-rc.1-3-g1a2b3c4: its files are on the rolling nightly release) */
+/* (a nightly's version, nightly-2029-c544828f (nightly-<commit count>-<commit>), or git describe --long's
+   v2.1.0-rc.1-3-g1a2b3c4 that named it before: its files are on the rolling nightly release. host/hos_update.c nightly_rank) */
 static int nightly_tag(const char *s) {
     size_t n = strlen(s), h;
     if (n > 6 && !strcmp(s + n - 6, "-dirty")) n -= 6;
+    if (!strncmp(s, "nightly-", 8)) {
+        size_t d = 8;
+        while (d < n && d < 17 && s[d] >= '0' && s[d] <= '9') d++;
+        if (d == 8 || d + 9 != n || s[d] != '-') return 0;
+        for (h = d + 1; h < n; h++)
+            if (!strchr("0123456789abcdef", s[h])) return 0;
+        return 1;
+    }
     for (h = n; h && strchr("0123456789abcdef", s[h - 1]); h--) {}
     if (h == n || h < 3 || s[h - 1] != 'g' || s[h - 2] != '-') return 0;
     size_t d = h - 2;

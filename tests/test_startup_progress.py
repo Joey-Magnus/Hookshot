@@ -37,6 +37,14 @@ int main() {
     CHECK(version_text("v2.0.5-2-g619c897-dirty (source 2c44105b)") == "v2.0.5 dev");
     CHECK(version_text("movie-sync (source 1a2b3c4d)") == "movie-sync");
     CHECK(version_text("unknown") == "unknown");
+    // (a nightly: its number on main and its commit, as players see it; the log keeps the name)
+    CHECK(version_text("nightly-2029-c544828f (source 1a2b3c4d)") == "Nightly 2029 \xC2\xB7 c544828f");
+    CHECK(version_text("nightly-2029-c544828f-dirty") == "Nightly 2029 \xC2\xB7 c544828f-dirty");
+    CHECK(release_text("nightly-2029-c544828f") == "Nightly 2029 \xC2\xB7 c544828f");
+    CHECK(release_text("nightly-2029-c544828") == "nightly-2029-c544828");      // (not 8 hex: as it is)
+    CHECK(release_text("nightly-x-c544828f") == "nightly-x-c544828f");
+    CHECK(release_text("nightly") == "nightly");
+    CHECK(release_text("v2.1.0-rc.3") == "v2.1.0-rc.3");
     CHECK(percent_text(0, 0).empty());
     CHECK(percent_text(12345, 38809) == "31%");
     CHECK(percent_text(38808, 38809) == "99%");   // (never 100% before the last one)

@@ -3,6 +3,9 @@
     python -I -B nx2/test_version.py
 """
 import os
+import re
+import shutil
+import subprocess
 import sys
 import tempfile
 
@@ -16,6 +19,38 @@ def tree(root, eol):
         os.makedirs(os.path.dirname(p), exist_ok=True)
         with open(p, "wb") as f:
             f.write(("line one%sline two%s" % (eol, eol)).encode())
+
+
+def checkout():
+    """A checkout's name: its release tag exactly on one, else nightly-<commit count>-<commit, 8 hex>, -dirty with changes"""
+    if shutil.which("git") is None:
+        print("version: no git here, the checkout's name is not checked")
+        return
+    with tempfile.TemporaryDirectory() as repo:
+        env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t",
+                   GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=os.devnull)
+
+        def git(*args):
+            return subprocess.run(["git", "-C", repo, *args], env=env, check=True, capture_output=True, text=True).stdout.strip()
+        git("init", "-q")
+        tree(repo, "\n")
+        git("add", ".")
+        git("commit", "-qm", "one")
+        git("commit", "-q", "--allow-empty", "-m", "two")
+        git("tag", "v2.1.0-rc.3")
+        os.environ.pop("HOOKSHOT_VERSION", None)
+        assert version.release(repo) == "v2.1.0-rc.3", version.release(repo)
+        git("commit", "-q", "--allow-empty", "-m", "three")
+        sha = git("rev-parse", "HEAD")[:8]
+        assert version.release(repo) == "nightly-3-%s" % sha, version.release(repo)
+        with open(os.path.join(repo, "host", "a.c"), "a") as f:
+            f.write("changed\n")
+        assert version.release(repo) == "nightly-3-%s-dirty" % sha, version.release(repo)
+        name = version.release(repo)
+        assert re.fullmatch(r"[0-9A-Za-z._+-]{1,128}", name), name   # (the setup lists' tag rule)
+        git("tag", "not-a-version")
+        git("checkout", "-q", "--", ".")
+        assert version.release(repo) == "nightly-3-%s" % sha, "only v tags name a release"
 
 
 def main():
@@ -40,6 +75,7 @@ def main():
         assert not set(d) & set('"\\&|%'), d
         assert version.define(lf).startswith('-DHOOKSHOT_VERSION="') and version.define(lf).endswith(')"')
         os.environ.pop("HOOKSHOT_VERSION")
+    checkout()
     print("version: ok (%s)" % version.describe())
 
 

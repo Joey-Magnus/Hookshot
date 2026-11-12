@@ -336,7 +336,7 @@ class ReleaseScripts(unittest.TestCase):
         """This run's files: the Linux AppImage, its .zsync and list, or the Windows setup, its list and zip."""
         out = self.dir / ("dist-" + platform + "-" + sha[:7])
         out.mkdir(exist_ok=True)
-        version = "v2.1.0-rc.3-%d-g%s" % ({self.Z: 1, self.A: 2, self.B: 3}.get(sha, 9), sha[:8])
+        version = "nightly-%d-%s" % ({self.Z: 2027, self.A: 2028, self.B: 2029}.get(sha, 2099), sha[:8])
         names = (["Hookshot-%s-x86_64.AppImage" % version, "Hookshot-%s-x86_64.AppImage.zsync" % version,
                   "hookshot-linux.txt"] if platform == "linux" else
                  ["HookshotBuilder.exe", "hookshot-setup.txt", "Hookshot-%s-Windows-x64.zip" % version])
@@ -371,11 +371,11 @@ class ReleaseScripts(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(self.state()["tags"]["nightly"], self.A)
         files = self.nightly_assets()
-        self.assertIn("Hookshot-v2.1.0-rc.3-2-gaaaaaaaa-x86_64.AppImage", files)
-        self.assertIn("Hookshot-v2.1.0-rc.3-2-gaaaaaaaa-x86_64.AppImage.zsync", files)
-        self.assertNotIn("Hookshot-v2.1.0-rc.3-1-g11111111-x86_64.AppImage", files)
-        self.assertNotIn("Hookshot-v2.1.0-rc.3-1-g11111111-x86_64.AppImage.zsync", files)
-        self.assertEqual(files["hookshot-linux.txt"], "linux v2.1.0-rc.3-2-gaaaaaaaa hookshot-linux.txt")
+        self.assertIn("Hookshot-nightly-2028-aaaaaaaa-x86_64.AppImage", files)
+        self.assertIn("Hookshot-nightly-2028-aaaaaaaa-x86_64.AppImage.zsync", files)
+        self.assertNotIn("Hookshot-nightly-2027-11111111-x86_64.AppImage", files)
+        self.assertNotIn("Hookshot-nightly-2027-11111111-x86_64.AppImage.zsync", files)
+        self.assertEqual(files["hookshot-linux.txt"], "linux nightly-2028-aaaaaaaa hookshot-linux.txt")
         self.assertIn("SHA256SUMS", files)
         # (no force: a fast-forward, which GitHub refuses when the tag moved past this commit)
         moves = [c for c in self.state()["calls"] if "repos/%s/git/refs/tags/nightly" % REPO in c]
@@ -404,9 +404,9 @@ class ReleaseScripts(unittest.TestCase):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(self.state()["tags"]["nightly"], self.A)
         files = self.nightly_assets()
-        self.assertIn("Hookshot-v2.1.0-rc.3-2-gaaaaaaaa-Windows-x64.zip", files)
-        self.assertNotIn("Hookshot-v2.1.0-rc.3-1-g11111111-Windows-x64.zip", files)
-        self.assertIn("Hookshot-v2.1.0-rc.3-2-gaaaaaaaa-x86_64.AppImage", files)
+        self.assertIn("Hookshot-nightly-2028-aaaaaaaa-Windows-x64.zip", files)
+        self.assertNotIn("Hookshot-nightly-2027-11111111-Windows-x64.zip", files)
+        self.assertIn("Hookshot-nightly-2028-aaaaaaaa-x86_64.AppImage", files)
         self.assertFalse([c for c in self.state()["calls"] if "PATCH" in c and any("git/refs" in a for a in c)])
 
     def test_nightly_platforms_move_on_their_own(self):
@@ -415,13 +415,13 @@ class ReleaseScripts(unittest.TestCase):
         self.assertEqual(self.nightly(self.B, "windows").returncode, 0)
         files = self.nightly_assets()
         self.assertEqual(self.state()["tags"]["nightly"], self.B)
-        self.assertIn("Hookshot-v2.1.0-rc.3-3-gbbbbbbbb-Windows-x64.zip", files)
-        self.assertIn("Hookshot-v2.1.0-rc.3-2-gaaaaaaaa-x86_64.AppImage", files)
+        self.assertIn("Hookshot-nightly-2029-bbbbbbbb-Windows-x64.zip", files)
+        self.assertIn("Hookshot-nightly-2028-aaaaaaaa-x86_64.AppImage", files)
         r = self.nightly(self.B, "linux")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         files = self.nightly_assets()
-        self.assertIn("Hookshot-v2.1.0-rc.3-3-gbbbbbbbb-x86_64.AppImage", files)
-        self.assertNotIn("Hookshot-v2.1.0-rc.3-2-gaaaaaaaa-x86_64.AppImage", files)
+        self.assertIn("Hookshot-nightly-2029-bbbbbbbb-x86_64.AppImage", files)
+        self.assertNotIn("Hookshot-nightly-2028-aaaaaaaa-x86_64.AppImage", files)
 
     def test_nightly_race_lost_to_a_newer_commit_changes_nothing(self):
         # (Linux of A looked at the tag (Z) before Windows of B moved it; its fast-forward from B to A is refused)
@@ -439,7 +439,7 @@ class ReleaseScripts(unittest.TestCase):
         r = self.nightly(self.B, "windows")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(self.state()["tags"]["nightly"], self.B)
-        self.assertIn("Hookshot-v2.1.0-rc.3-3-gbbbbbbbb-Windows-x64.zip", self.nightly_assets())
+        self.assertIn("Hookshot-nightly-2029-bbbbbbbb-Windows-x64.zip", self.nightly_assets())
 
     def test_nightly_two_runs_at_once_end_at_the_newer_commit(self):
         for first in ("A", "B"):
@@ -458,12 +458,12 @@ class ReleaseScripts(unittest.TestCase):
                     self.assertEqual(run.returncode, 0, output)
                 self.assertEqual(self.state()["tags"]["nightly"], self.B)
                 files = self.nightly_assets()
-                self.assertIn("Hookshot-v2.1.0-rc.3-3-gbbbbbbbb-Windows-x64.zip", files)
+                self.assertIn("Hookshot-nightly-2029-bbbbbbbb-Windows-x64.zip", files)
                 # (Linux's files are A's, or still Z's when it lost the race: never a mix)
                 linux = sorted(n for n in files if ".AppImage" in n)
-                self.assertIn(linux, [["Hookshot-v2.1.0-rc.3-%s-x86_64.AppImage" % v,
-                                       "Hookshot-v2.1.0-rc.3-%s-x86_64.AppImage.zsync" % v]
-                                      for v in ("1-g11111111", "2-gaaaaaaaa")])
+                self.assertIn(linux, [["Hookshot-nightly-%s-x86_64.AppImage" % v,
+                                       "Hookshot-nightly-%s-x86_64.AppImage.zsync" % v]
+                                      for v in ("2027-11111111", "2028-aaaaaaaa")])
                 self.assertIn(linux[0].split("-x86_64")[0].split("Hookshot-")[1], files["hookshot-linux.txt"])
 
     def test_nightly_made_when_there_is_no_tag(self):
@@ -630,7 +630,7 @@ class ReleaseScripts(unittest.TestCase):
         return [a for c in self.state()["calls"] for a in c if "uploads.github.com" in a]
 
     def test_rc_holds_the_newest_release_candidate(self):
-        self.given([rel(90, "nightly", False, True, assets=self.linux("v2.1.0-rc.3-4-gabcdef0")),
+        self.given([rel(90, "nightly", False, True, assets=self.linux("nightly-2029-abcdef01")),
                     rel(91, "linux-parts", False, True, assets=["HookshotLinux-a.zip"]),
                     self.released(2, "v2.1.0-rc.2"), self.released(3, "v2.1.0-rc.3"), self.released(1, "v2.0.14"),
                     rel(4, "v2.1.0", True, False, assets=self.linux("v2.1.0"))],

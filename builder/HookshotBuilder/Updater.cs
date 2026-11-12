@@ -39,44 +39,72 @@ static class Updater
     // builder/linux/linux_update.py have the same rules ----
     public const string Release = "release", Candidate = "rc", Nightly = "nightly";
     const string Releases = "https://api.github.com/repos/NotRexed/Hookshot/releases";
-    static readonly System.Text.RegularExpressions.Regex NightlyName = new(@"-\d+-g[0-9a-f]+(-dirty)?$");
+    static readonly System.Text.RegularExpressions.Regex NightlyName = new(@"^nightly-(\d{1,9})-([0-9a-f]{8})(-dirty)?$");
+    static readonly System.Text.RegularExpressions.Regex OldNightlyName = new(@"-\d+-g[0-9a-f]+(-dirty)?$");
     static readonly System.Text.RegularExpressions.Regex ReleaseName = new(@"^v(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?$");
 
-    /// A build's track from its version: git describe --long's v2.1.0-rc.1-3-g1a2b3c4 is the nightly, v2.1.0-rc.1 a release
-    /// candidate, anything else a release
+    /// A build's track from its version: nightly-2029-c544828f is the nightly (and git describe --long's
+    /// v2.1.0-rc.1-3-g1a2b3c4, its name before), v2.1.0-rc.1 a release candidate, anything else a release
     public static string TrackOf(string? version) =>
-        version == null ? Release : NightlyName.IsMatch(version) ? Nightly : ReleaseName.IsMatch(version) && version.Contains('-') ? Candidate : Release;
+        version == null ? Release : NightlyKey(version) != null ? Nightly : ReleaseName.IsMatch(version) && version.Contains('-') ? Candidate : Release;
 
     /// The release that holds a version's files: the nightly's are on the rolling nightly release
     static string ReleaseOf(string tag) => TrackOf(tag) == Nightly ? Nightly : tag;
 
-    /// a newer than b, both vX.Y.Z[-rc.N] in semver order (v2.1.0-rc.1 < v2.1.0-rc.2 < v2.1.0); a nightly counts as just after
-    /// the version it names; false when either is not a version
+    /// A nightly's place in the nightly order (null: no nightly): nightly-&lt;count&gt;-&lt;commit&gt; by its count, -dirty after the
+    /// build of its own commit; the old git describe name before every one of those, and not ordered among themselves
+    static long[]? NightlyKey(string? v)
+    {
+        if (v == null) return null;
+        var m = NightlyName.Match(v);
+        if (m.Success) return new[] { 1, long.Parse(m.Groups[1].Value), m.Groups[3].Success ? 1 : 0 };
+        return OldNightlyName.IsMatch(v) ? new long[] { 0, 0, 0 } : null;
+    }
+
+    /// A version as the builder shows it: nightly-2029-c544828f as "Nightly 2029 · c544828f" (-dirty kept), any other as it is.
+    /// Files and logs keep the version itself
+    public static string Shown(string? version) =>
+        version != null && NightlyName.Match(version) is { Success: true } m ? $"Nightly {m.Groups[1].Value} · {m.Groups[2].Value}{m.Groups[3].Value}" : version ?? "";
+
+    /// a newer than b: both vX.Y.Z[-rc.N] in semver order (v2.1.0-rc.1 < v2.1.0-rc.2 < v2.1.0), or both nightlies in the
+    /// nightly order (NightlyKey). A nightly and a release are not ordered (a nightly's name has no version in it): false
+    /// both ways, as when either is not a version
     public static bool Newer(string? a, string? b)
     {
         static long[]? Key(string? v)
         {
             if (v == null) return null;
-            var after = NightlyName.Match(v);
-            var m = ReleaseName.Match(after.Success ? v[..after.Index] : v);
+            var m = ReleaseName.Match(v);
             if (!m.Success) return null;
             return new[] { long.Parse(m.Groups[1].Value), long.Parse(m.Groups[2].Value), long.Parse(m.Groups[3].Value),
-                           m.Groups[4].Success ? long.Parse(m.Groups[4].Value) : long.MaxValue, after.Success ? 1 : 0 };
+                           m.Groups[4].Success ? long.Parse(m.Groups[4].Value) : long.MaxValue };
         }
-        var x = Key(a);
-        var y = Key(b);
+        var na = NightlyKey(a);
+        var nb = NightlyKey(b);
+        var x = na ?? (nb == null ? Key(a) : null);
+        var y = nb ?? (na == null ? Key(b) : null);
         if (x == null || y == null) return false;
         for (var i = 0; i < x.Length; i++)
             if (x[i] != y[i]) return x[i] > y[i];
         return false;
     }
 
-    /// What to update to: the track's newest (latest) for a release as before, a nightly, or after a switch of track (even
-    /// an older version); for a release candidate only when it is newer, so it is never taken back to an older release
+    /// A nightly and a release or release candidate: one built over the other changes the folder's track, which only a Track chosen
+    /// in the menu does, and the player is asked first. False when either names no version (a hash, dev)
+    public static bool OtherTrack(string? a, string? b)
+    {
+        static bool IsNightly(string? v) => NightlyKey(v) != null;
+        static bool Named(string? v) => v != null && (IsNightly(v) || ReleaseName.IsMatch(v));
+        return Named(a) && Named(b) && IsNightly(a) != IsNightly(b);
+    }
+
+    /// What to update to: the track's newest (latest) for a release as before, or after a switch of track (even an older
+    /// version); for a release candidate and a nightly only when it is newer, so a release candidate is never taken back to
+    /// an older release, and a nightly only goes forward
     public static string? Target(string? latest, string? tools, string track)
     {
         if (latest == null) return tools;
-        if (tools == null || track != Candidate || TrackOf(tools) != Candidate) return latest;
+        if (tools == null || track == Release || TrackOf(tools) != track) return latest;
         return Newer(latest, tools) ? latest : tools;
     }
 

@@ -1,0 +1,12 @@
+<Project>
+  <!-- The launcher's packages, one version each (exact pins; packages.lock.json records what they bring in) -->
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>false</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="Avalonia" Version="[12.1.6]"/>
+    <PackageVersion Include="Avalonia.Desktop" Version="[12.1.6]"/>
+    <PackageVersion Include="Avalonia.Themes.Fluent" Version="[12.1.6]"/>
+  </ItemGroup>
+</Project>

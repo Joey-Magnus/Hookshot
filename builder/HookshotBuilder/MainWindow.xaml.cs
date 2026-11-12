@@ -180,7 +180,9 @@ public partial class MainWindow : Window
         var builder = Tools.Find()?.Version;
         // (the newest release known: GitHub's, else this builder's own. v2.0.0 took a GitHub that did not answer for "up to date")
         updateTarget = Updater.Target(latestTag, builder, Track);
-        if (game != null && updateTarget != null && game != updateTarget && !sourcePicked) mode = Mode.UpdateGame;
+        // (a nightly folder and a release target, or the other way: another track's build, offered only when that track is chosen)
+        var otherTrack = !Switching && Updater.OtherTrack(game, updateTarget);
+        if (game != null && updateTarget != null && game != updateTarget && !sourcePicked && !otherTrack) mode = Mode.UpdateGame;
         else if (game != null && !sourcePicked) mode = Mode.UpToDate;
         else if (latestTag != null && builder != null && builder != updateTarget) mode = Mode.UpdateBuilder;
         else mode = Mode.Build;
@@ -188,20 +190,22 @@ public partial class MainWindow : Window
         {
             case Mode.UpdateGame:
                 FilesTitle.Text = "Update available";
-                FilesSub.Text = $"Hookshot {updateTarget} is available. Your game is {game}: Update builds it again from the game files kept in " +
+                FilesSub.Text = $"Hookshot {Updater.Shown(updateTarget)} is available. Your game is {Updater.Shown(game)}: Update builds it again from the game files kept in " +
                                 "its folder, compiling only what changed.";
                 BuildButton.Content = "Update";
                 break;
             case Mode.UpToDate:
-                FilesTitle.Text = "Your game is up to date";
-                FilesSub.Text = latestTag == null
-                    ? $"Your game is {game}, as this builder. GitHub did not answer, so newer versions could not be checked."
-                    : $"{game} is the latest version. Pick game files below only to build it again from scratch.";
+                FilesTitle.Text = otherTrack ? "Your game is on another update track" : "Your game is up to date";
+                FilesSub.Text = otherTrack
+                    ? $"Your game is {Updater.Shown(game)}, on another update track than {Updater.Shown(updateTarget)}. Play keeps this version; choose its track under Update track to update it."
+                    : latestTag == null
+                    ? $"Your game is {Updater.Shown(game)}, as this builder. GitHub did not answer, so newer versions could not be checked."
+                    : $"{Updater.Shown(game)} is the latest version. Pick game files below only to build it again from scratch.";
                 BuildButton.Content = "Play";
                 break;
             case Mode.UpdateBuilder:
                 FilesTitle.Text = "Build your game";
-                FilesSub.Text = $"Hookshot Builder {updateTarget} is available (this one is {builder}): update it first, then build.";
+                FilesSub.Text = $"Hookshot Builder {Updater.Shown(updateTarget)} is available (this one is {Updater.Shown(builder)}): update it first, then build.";
                 BuildButton.Content = "Update builder";
                 break;
             default:
@@ -230,21 +234,23 @@ public partial class MainWindow : Window
         OutPath.Text = folder;
         StepPill.Visibility = Visibility.Collapsed;
         var game = GameVersion(folder) ?? ReadVersion(folder);
-        LaunchVersion.Text = (game != null ? $"Hookshot {game}" : "Hookshot") + " · " + folder;
+        LaunchVersion.Text = (game != null ? $"Hookshot {Updater.Shown(game)}" : "Hookshot") + " · " + folder;
         LaunchPlay.IsEnabled = File.Exists(GameExe(folder));
         ShowPage(LaunchPage);
         latestTag = Environment.GetEnvironmentVariable("HOOKSHOT_LATEST_TAG") is { Length: > 0 } fake ? (fake == "none" ? null : fake) : await Updater.LatestTag(Track);
         updateTarget = Updater.Target(latestTag, Tools.Find()?.Version, Track);   // (GitHub's newest, else this builder's own)
         if (updateTarget == null) LaunchStatus.Text = "Could not check for updates (GitHub did not answer)";
+        else if (!Switching && Updater.OtherTrack(game, updateTarget))
+            LaunchStatus.Text = $"Your game is {Updater.Shown(game)}, on another update track than {Updater.Shown(updateTarget)}";
         else if (game != null && game != updateTarget && GameVersion(folder) != null)
         {
-            LaunchStatus.Text = $"Update available: {updateTarget}";
+            LaunchStatus.Text = $"Update available: {Updater.Shown(updateTarget)}";
             LaunchStatus.Foreground = new SolidColorBrush(Color.FromRgb(0xB9, 0xC8, 0xFF));
             LaunchStatus.FontWeight = FontWeights.SemiBold;
             LaunchUpdate.Visibility = Visibility.Visible;
         }
         else if (game != null && game != updateTarget)
-            LaunchStatus.Text = $"{updateTarget} is out: build this folder again with the Hookshot Builder to get it";
+            LaunchStatus.Text = $"{Updater.Shown(updateTarget)} is out: build this folder again with the Hookshot Builder to get it";
         else LaunchStatus.Text = latestTag == null ? "Up to date with this builder (GitHub did not answer)" : "Up to date";
     }
 
@@ -307,10 +313,13 @@ public partial class MainWindow : Window
         RefreshMode();
     }
 
-    /// (going to an older version, from another track: asked first)
+    /// (going to an older version, or to another track's build (a nightly and a release are not ordered), from another track: asked
+    /// first)
     bool OlderOk(string? have) =>
-        !Switching || !Updater.Newer(have, updateTarget) ||
-        MessageBox.Show(this, $"{updateTarget} is older than {have}, the version you have now. Install {updateTarget}?", "Hookshot",
+        !Switching || !(Updater.Newer(have, updateTarget) || Updater.OtherTrack(have, updateTarget)) ||
+        MessageBox.Show(this, Updater.OtherTrack(have, updateTarget)
+                            ? $"{Updater.Shown(updateTarget)} is on another update track than {Updater.Shown(have)}, the version you have now. Install {Updater.Shown(updateTarget)} in its place?"
+                            : $"{Updater.Shown(updateTarget)} is older than {Updater.Shown(have)}, the version you have now. Install {Updater.Shown(updateTarget)}?", "Hookshot",
                         MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
 
     void LaunchPlayClick(object sender, RoutedEventArgs e)

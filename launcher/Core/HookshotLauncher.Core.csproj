@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- The launcher's logic, with no package and no UI: tests/launcher_core compiles these sources itself -->
+  <PropertyGroup>
+    <RootNamespace>HookshotLauncher.Core</RootNamespace>
+    <AssemblyName>HookshotLauncher.Core</AssemblyName>
+  </PropertyGroup>
+</Project>
