@@ -92,13 +92,22 @@ jobs:
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # (a release's tag: the AppImage is named by git describe)
           ref: ${{ inputs.tag }}
+          # (the whole history: a build that is not a release is named by its commit count, scripts/nightly_name.sh)
           fetch-depth: 0
           persist-credentials: false
 
       - name: Trust the checkout
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      # (a release is its tag; any other build, the nightly's too, nightly-<commits in its history>-<commit>, even on a
+      # tagged commit, so the builder, the setup and the game know it is the nightly: docs/versioning.md)
+      - name: Version
+        shell: bash
+        run: |
+          version=${RELEASE_TAG:-$(scripts/nightly_name.sh)}
+          echo "BUILD_VERSION=$version" >> "$GITHUB_ENV"
+          echo "version: $version"
 
       # (a release builds what the AppImage carries from its checked downloads: no built deps from a cache, which other
       # runs write. Other runs take the built deps, without the downloads they were built from: deps.sh fetches only a
@@ -168,9 +177,9 @@ jobs:
       # back to an older release, as the builder's Release candidate Update track does, builder/linux/hookshot_builder.py)
       - name: AppImage
         env:
-          # (a release is named by its tag: a promoted version's commit also has its release candidate's tag, which git
-          # describe could name instead)
-          HOOKSHOT_VERSION: ${{ env.RELEASE_TAG }}
+          # (the Version step's: a release is named by its tag, as a promoted version's commit also has its release
+          # candidate's tag, which git describe could name instead)
+          HOOKSHOT_VERSION: ${{ env.BUILD_VERSION }}
           HOOKSHOT_UPDATE_RELEASE: >-
             ${{ env.RELEASE_TAG == '' && github.event_name == 'push' && github.ref == 'refs/heads/main' && 'nightly'
             || contains(env.RELEASE_TAG, '-') && 'rc' || 'latest' }}

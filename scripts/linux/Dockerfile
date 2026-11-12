@@ -23,7 +23,7 @@ RUN apt-get update \
 
 # (run as the caller's user, whose home is not in the image: git and pip want a writable HOME)
 ENV HOME=/tmp
-# (the checkout belongs to the caller, not to the container's user under every runtime: git describe names the version)
+# (the checkout belongs to the caller, not to the container's user under every runtime: git names the version: scripts/nightly_name.sh)
 RUN git config --system --add safe.directory /src
 WORKDIR /src
 CMD ["bash", "-c", "scripts/linux/deps.sh && scripts/linux/appimage.sh"]

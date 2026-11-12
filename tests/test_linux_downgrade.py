@@ -75,16 +75,23 @@ class Admission(unittest.TestCase):
         for game, tools, latest in [("v2.2.0", "v2.1.0", None), ("v2.2.0", "v2.0.14", "v2.1.0"),
                                     ("v2.1.0", "v2.1.0-rc.10", None),
                                     ("v2.1.0-rc.10", "v2.1.0-rc.9", None),
-                                    ("v2.1.0-3-gabc1234", "v2.1.0", None)]:
+                                    ("nightly-2030-abc12345", "nightly-2029-def12345", None),
+                                    ("nightly-2029-abc12345", "v2.1.0-3-gabc1234", None),
+                                    # (a nightly and a release are not ordered, so neither is built over the other unless
+                                    # the Track is switched: docs/versioning.md, "Update tracks")
+                                    ("nightly-2029-abc12345", "v2.1.0", None), ("v2.1.0", "nightly-2029-abc12345", None),
+                                    ("nightly-2029-abc12345", "v2.0.14", "v2.1.0"),
+                                    ("v2.1.0-rc.3-251-gee29dd55", "v2.1.0", None), ("v2.1.0", "v2.1.0-3-gabc1234", None)]:
             with self.subTest(game=game, tools=tools, latest=latest):
                 self.assertEqual(linux_update.choose_mode(game, tools, latest, False, True), "up-to-date")
                 self.assertEqual(linux_update.choose_mode(game, tools, latest, False, True, True), "update-game")
 
     def test_forward_and_unordered_nightly_contract_is_preserved(self):
         for game, tools, latest in [("v2.0.9", "v2.0.10", None), ("v2.1.0-rc.9", "v2.1.0-rc.10", None),
-                                    ("v2.1.0-rc.10", "v2.1.0", None), ("v2.1.0", "v2.1.0-3-gabc1234", None),
+                                    ("v2.1.0-rc.10", "v2.1.0", None),
                                     ("v2.1.0-3-gabc1234", "v2.1.0-4-gdef1234", "v2.1.0-4-gdef1234"),
-                                    ("authored-hash", "v2.1.0", None)]:
+                                    ("nightly-2029-abc12345", "nightly-2030-def12345", None),
+                                    ("authored-hash", "v2.1.0", None), ("authored-hash", "nightly-2029-abc12345", None)]:
             with self.subTest(game=game, tools=tools):
                 self.assertEqual(linux_update.choose_mode(game, tools, latest, False, True), "update-game")
         self.assertEqual(linux_update.choose_mode("v2.2.0", "v2.1.0", None, True, True), "build")
@@ -137,6 +144,49 @@ class Admission(unittest.TestCase):
             self.assertEqual(app.mode, "update-game")
             app.build()
         self.assertEqual(events, ["confirm", "progress", "worker"])
+
+    def test_another_track_is_not_offered_by_default_and_is_confirmed_when_chosen(self):
+        app, events = handlers(False)
+        app.tools = "v2.1.0"
+        with mock.patch.object(linux_update, "game_version", return_value=("nightly-2029-abc12345", True)):
+            app.apply_mode()
+            self.assertEqual(app.mode, "up-to-date")
+            self.assertIn("another update track", app.status.get())
+            self.assertIn("Nightly 2029", app.status.get())
+            app.launch_folder = "authored-game"
+            app.apply_launch()
+            self.assertFalse(app.launch_update.visible)
+            self.assertIn("another update track", app.launch_status.get())
+            app.launch_folder = ""
+            app.switching = lambda: True
+            app.apply_mode()
+            self.assertEqual(app.mode, "update-game")
+            app.build()
+        self.assertEqual(events, ["confirm"])
+        self.assertEqual(app.update_folder, "prior")
+
+    def test_confirmed_change_of_track_handoff_carries_the_consent(self):
+        class Handoff(BaseException):
+            pass
+        app, events = handlers(True, run_worker=True)
+        app.tools, app.latest, app.fetched, app.switching = "nightly-2029-abc12345", "v2.1.0", False, lambda: True
+        with mock.patch.object(linux_update, "game_version", return_value=("nightly-2029-abc12345", True)), \
+             mock.patch.object(linux_update, "running_root", return_value="authored-appdir"), \
+             mock.patch.object(linux_update, "startup_manifest", return_value=types.SimpleNamespace(tag="v2.1.0")), \
+             mock.patch.object(linux_update, "tools_tag", return_value="nightly-2029-abc12345"), \
+             mock.patch.object(linux_update, "read_manifest", return_value=None), \
+             mock.patch.object(linux_update, "install", return_value="authored-apprun"), \
+             mock.patch.dict(os.environ), mock.patch.object(os, "execv", side_effect=Handoff) as handoff:
+            with self.assertRaises(Handoff):
+                app.begin_update("authored-game")
+            self.assertEqual(events, ["confirm", "progress", "worker"])
+            handoff.assert_called_once_with("authored-apprun", ["authored-apprun", "--update", "authored-game", "--tag", "v2.1.0", "--fetched", "--allow-downgrade-from", "nightly-2029-abc12345"])
+        # (the new builder, a release's, is handed that consent and does not ask again)
+        app, events = handlers(False)
+        app.update_tag, app.allow_downgrade_from = app.tools, "nightly-2029-abc12345"
+        with mock.patch.object(linux_update, "game_version", return_value=("nightly-2029-abc12345", True)):
+            app.begin_update("authored-game")
+        self.assertEqual(events, ["progress", "worker"])
 
     def test_download_list_cannot_replace_the_target_even_with_the_running_tools(self):
         for offered in ("v2.1.0", "v2.0.14", "v2.4.0"):

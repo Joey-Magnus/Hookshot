@@ -33,10 +33,12 @@ When a confirmed downgrade installs another Builder, the decision carries forwar
 game version and requested Builder version. A changed game is asked again. An older Builder's handoff does not
 grant consent by itself, and tools that do not match the requested version are refused before rebuilding.
 
-Ordering follows the existing `release_key` contract: numeric release versions, release candidates before their
-release, and git-describe builds after their tag. Arbitrary hashes and two different nightlies are not commit
-ancestry evidence; their existing update policy is unchanged. The new launcher's explicit release selector is
-separate from this default-action policy.
+Ordering follows `linux_update.newer`: releases and release candidates in semver order, nightlies by their commit
+count (`nightly-2029-…` before `nightly-2030-…`). A nightly and a release are not ordered at all, so a game on
+one of those tracks opened with a Builder on the other keeps **Play** and is told it is on another update track;
+choosing its track in the menu updates it, and moving it to the other track is asked first, as a downgrade is
+(docs/versioning.md, "Update tracks"). Arbitrary hashes are not ordered either; their existing update policy is
+unchanged. The new launcher's explicit release selector is separate from this default-action policy.
 
 ## Validation scope
 

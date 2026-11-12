@@ -5,6 +5,7 @@
    repository, or before updates came in) is never asked about. HOOKSHOT_NO_UPDATE_CHECK=1 (hookshot_env.txt) turns it off */
 #if defined(_WIN32) || defined(__linux__)
 #include <ctype.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -20,17 +21,43 @@ static int safe_tag(const char *s) {
 
 /* (the update tracks, from the folder's version: a release (v2.0.7) is offered the latest release as before; a release
    candidate (v2.1.0-rc.1) the newest of the release candidates and the releases, only when it is newer (so never an older
-   release, and its own version's release once that ships); a nightly (git describe --long's v2.1.0-rc.1-3-g1a2b3c4) the
-   nightly's build whenever it is another. The builder's Track menu switches track; builder/linux/linux_update.py has the
-   same rules) */
-static int nightly_version(const char *s) {
+   release, and its own version's release once that ships); a nightly (nightly-2029-c544828f) the nightly's build when it
+   is a newer nightly. The builder's Track menu switches track; builder/linux/linux_update.py has the same rules,
+   docs/versioning.md) */
+
+/* a nightly's place in the nightly order: nightly-<count>-<8 hex>[-dirty], count the commits in its history, is 2 * count + 2
+   (+ 1 with -dirty: after the build of its own commit); git describe --long's v2.1.0-rc.1-3-g1a2b3c4, the nightly's name
+   before, is 1: older than every nightly-<count>, and not ordered among themselves; 0 when it is no nightly */
+static long nightly_rank(const char *s) {
     size_t n = strlen(s), h;
-    if (n > 6 && !strcmp(s + n - 6, "-dirty")) n -= 6;
+    const int dirty = n > 6 && !strcmp(s + n - 6, "-dirty");
+    if (dirty) n -= 6;
+    if (!strncmp(s, "nightly-", 8)) {
+        size_t d = 8;
+        long count = 0;
+        while (d < n && d < 17 && isdigit((unsigned char)s[d])) count = count * 10 + (s[d++] - '0');
+        if (d == 8 || d + 9 != n || s[d] != '-') return 0;
+        for (h = d + 1; h < n; h++)
+            if (!strchr("0123456789abcdef", s[h])) return 0;
+        return 2 * count + 2 + dirty;
+    }
     for (h = n; h && isxdigit((unsigned char)s[h - 1]); h--) {}
     if (h == n || h < 3 || s[h - 1] != 'g' || s[h - 2] != '-') return 0;
     size_t d = h - 2;
     while (d && isdigit((unsigned char)s[d - 1])) d--;
     return d < h - 2 && d > 0 && s[d - 1] == '-';
+}
+
+static int nightly_version(const char *s) { return nightly_rank(s) > 0; }
+
+/* a version as the update question shows it: nightly-2029-c544828f as "Nightly 2029 · c544828f" (-dirty kept), any other as
+   it is. The log keeps the version itself */
+static void shown_version(const char *s, char *out, size_t cap) {
+    if (nightly_rank(s) > 1) {
+        const char *sha = strchr(s + 8, '-');
+        snprintf(out, cap, "Nightly %.*s \xC2\xB7 %s", (int)(sha - s - 8), s + 8, sha + 1);
+    } else
+        snprintf(out, cap, "%s", s);
 }
 
 /* vX.Y.Z or vX.Y.Z-rc.N: v[3] is N, or a release's (above every N) */
@@ -49,9 +76,12 @@ static int parse_version(const char *s, long v[4]) {
     return !*e;
 }
 
-/* a newer than b, both vX.Y.Z[-rc.N] (0 when either is not) */
+/* a newer than b: both vX.Y.Z[-rc.N] in semver order, or both nightlies in the nightly order (nightly_rank). A nightly and a
+   release or release candidate are not ordered (a nightly's name has no version in it): 0, as when either is neither */
 static int newer_version(const char *a, const char *b) {
     long x[4], y[4];
+    const long na = nightly_rank(a), nb = nightly_rank(b);
+    if (na || nb) return na && nb && na > nb;
     if (!parse_version(a, x) || !parse_version(b, y)) return 0;
     for (int i = 0; i < 4; i++)
         if (x[i] != y[i]) return x[i] > y[i];
@@ -206,12 +236,17 @@ void hos_update_check(void) {
     fprintf(stderr, "update: this folder is %s, the latest release is %s\n", have, tag);
     if (!strcmp(tag, have) || !strcmp(tag, skipped)) return;
     if (strchr(have, '-') && !nightly_version(have) && !newer_version(tag, have)) return;   /* (a release candidate: newer only) */
+    if (nightly_version(have) && !newer_version(tag, have)) return;   /* (a nightly: a newer nightly only) */
     if (!nightly_version(have) && newer_version(have, tag)) return;   /* (a release or release candidate newer than the latest:
         a test build of the next release, before it is out. "Update" would build the older one over it, 2026-11-11) */
 
-    wchar_t wtag[128], whave[128], wbuilder[MAX_PATH], text[2048];
+    wchar_t wtag[128], wshown[160], whave[160], wbuilder[MAX_PATH], text[2048];
+    char shown[160];
     MultiByteToWideChar(CP_UTF8, 0, tag, -1, wtag, 128);
-    MultiByteToWideChar(CP_UTF8, 0, have, -1, whave, 128);
+    shown_version(tag, shown, sizeof shown);
+    MultiByteToWideChar(CP_UTF8, 0, shown, -1, wshown, 160);
+    shown_version(have, shown, sizeof shown);
+    MultiByteToWideChar(CP_UTF8, 0, shown, -1, whave, 160);
     _snwprintf(file, MAX_PATH + 64, L"%ls\\hookshot_version.txt", dir);
     char local_mode[8];
     const int portable = read_value(file, "builder_local", local_mode, sizeof local_mode) && !strcmp(local_mode, "1");
@@ -225,13 +260,13 @@ void hos_update_check(void) {
                    L"Update now? The game closes, and Hookshot Builder downloads the new version and builds this game folder again from the "
                    L"game files it keeps. That takes about as long as your first build. Your saves and settings stay.\n\n"
                    L"Yes: update now\nNo: not now (asked again next time)\nCancel: skip this version",
-                   wtag, whave);
+                   wshown, whave);
     else
         _snwprintf(text, 2048,
                    L"A new version of Hookshot is out: %ls (this game is %ls).\n\n"
                    L"The Hookshot Builder that made this folder was not found, so it can't update by itself. Open the download page?\n\n"
                    L"Yes: open the page\nNo: not now (asked again next time)\nCancel: skip this version",
-                   wtag, whave);
+                   wshown, whave);
     const int answer = MessageBoxW(NULL, text, L"Hookshot update", MB_YESNOCANCEL | MB_ICONINFORMATION | MB_TOPMOST | MB_SETFOREGROUND);
     if (answer == IDCANCEL) {
         wchar_t user[MAX_PATH + 16];
@@ -388,17 +423,20 @@ void hos_update_check(void) {
     fprintf(stderr, "update: this folder is %s, the latest release is %s\n", have, tag);
     if (!strcmp(tag, have) || !strcmp(tag, skipped)) return;
     if (strchr(have, '-') && !nightly_version(have) && !newer_version(tag, have)) return;   /* (a release candidate: newer only) */
+    if (nightly_version(have) && !newer_version(tag, have)) return;   /* (a nightly: a newer nightly only) */
     if (!nightly_version(have) && newer_version(have, tag)) return;   /* (a release or release candidate newer than the latest:
         a test build of the next release, before it is out. "Update" would build the older one over it, 2026-11-11) */
     snprintf(path, sizeof path, "%shookshot_version.txt", dir);
     const int has_builder = installed_builder(builder, sizeof builder) ||
                             (read_value(path, "builder", builder, sizeof builder) && access(builder, X_OK) == 0);
-    char text[1600], cmd[4096];
+    char text[1600], cmd[4096], shown_tag[160], shown_have[160];
+    shown_version(tag, shown_tag, sizeof shown_tag);
+    shown_version(have, shown_have, sizeof shown_have);
     snprintf(text, sizeof text,
              has_builder
                  ? "A new version of Hookshot is out: %s (this game is %s). Update now? The game closes, and Hookshot Builder downloads only what changed and builds this folder again. Your saves and settings stay."
                  : "A new version of Hookshot is out: %s (this game is %s). The builder that made this folder was not found. Open the download page?",
-             tag, have);
+             shown_tag, shown_have);
     snprintf(cmd, sizeof cmd, "zenity --list --title=Hookshot --hide-header --column= --text='%s' 'Update now' 'Not now' 'Skip this version'", text);
     FILE *pick = popen(cmd, "r");
     if (!pick) return;

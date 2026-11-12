@@ -16,6 +16,25 @@ the Release workflow's record job, once a version is published. The release pull
 `MAJOR.MINOR.PATCH`, with an optional prerelease suffix: `2.0.7`, `2.1.0`, `2.1.0-rc.1`. A release is tagged `v2.0.7`:
 the `v` belongs to the tag, not to the version. Build metadata is not used in tags.
 
+A build that is not a release is a nightly, named `nightly-<count>-<commit>`: `nightly-2029-c544828f`. The count is
+the number of commits in its history (`git rev-list --count HEAD`), which only grows along `main`, so a later nightly
+has a larger number; the commit is the first 8 hex digits of its own. A checkout with changes adds `-dirty`
+(`nightly-2029-c544828f-dirty`). Players see it as "Nightly 2029 · c544828f"; files, logs and the update lists keep
+the name itself. CI names every build it does not make for a release tag so (the nightly, pull requests, the Actions
+tab), even one on a tagged commit (`scripts/nightly_name.sh`), and a checkout is named so unless it is exactly on a
+release tag (`nx2/version.py`). The count needs the whole history: CI checks out with `fetch-depth: 0`, and
+`scripts/nightly_name.sh` refuses a shallow checkout. Until `2.1.0-rc.3`, a nightly was named by `git describe --long`
+(`v2.1.0-rc.3-248-gc544828f`); that name is still read as a nightly, older than every `nightly-<count>`.
+
+The count orders the builds of `main` only. A branch counts its own history, so a local branch three commits ahead of
+`main`'s nightly 2029 is `nightly-2032-…`, and it is not offered `main`'s 2030 or 2031: that is as meant, since it is
+newer work, and building `main` again names it by `main`'s count. A pull request's CI build is named by the merge
+commit GitHub makes for it, which counts `main`'s commits, the pull request's and itself; nothing published uses that
+name, since only a push to `main` or a release tag uploads files to a release (the release jobs of both build
+workflows): a pull request's build is only a run's artifact. Should `main` ever be rewritten to
+fewer commits, the next nightlies would count lower than the one installed and would not be offered until `main`
+passes it again.
+
 One version covers the whole project: the game (`hookshot.exe` / `hookshot`), the Vulkan back end, the lift pipeline
 and its scripts, Hookshot Builder and the Linux AppImage. They are built from the same commit and released together,
 so they never carry different versions.
@@ -184,8 +203,9 @@ moves forward: a run takes the nightly when its commit comes after the one the t
 still building, so it keeps up during a run of merges instead of waiting for `main` to be quiet. The tag is moved as a
 fast-forward, which GitHub refuses when the other platform's run has moved it past this commit meanwhile; a run of an
 older commit (or a re-run of an old one) leaves it alone. Each platform's files are one commit's and named by it (the
-AppImage and the RecompLauncher zip by their version, `hookshot-linux.txt` and `hookshot-setup.txt` by their tag, which
-is what each platform's updaters read), but the two builds finish at different times, so while `main` moves one
+AppImage and the RecompLauncher zip by their version, `Hookshot-nightly-2029-c544828f-x86_64.AppImage`,
+`hookshot-linux.txt` and `hookshot-setup.txt` by their tag, `tag nightly-2029-c544828f`, which is what each platform's
+updaters read), but the two builds finish at different times, so while `main` moves one
 platform's files can be a commit or two behind the other's; the tag is at the newest. Its new parts go to `linux-parts`
 and `builder-parts`, like a release's. Its AppImage's update information names the `nightly` release instead of
 `latest`, so AppImageUpdate updates a nightly AppImage to the next nightly. (Gear Lever reads only `latest`,
@@ -217,18 +237,38 @@ version: the builders, the setup, the game's update check and the parts lookup r
 
 The builders (Windows and Linux) have an **Update track** menu: Release, Release candidate or Nightly. By default it
 is the track of the build installed, read from its version: `v2.0.7` is a release, `v2.1.0-rc.1` a release candidate,
-and git describe's `v2.1.0-rc.1-3-g1a2b3c4` the nightly (named with `--long`, so a nightly built on a tagged commit is
-`-0-g...` and still says so). A choice is saved with the builder's settings.
+and `nightly-2029-c544828f` the nightly (CI names a nightly so even on a tagged commit, so it still says so), as is the
+older `v2.1.0-rc.1-3-g1a2b3c4`. A choice is saved with the builder's settings.
 
 | Track | Updates to | Offered when |
 |---|---|---|
 | Release | the latest release | it is another version (as before) |
 | Release candidate | the newest of the release candidates and releases (semver: `rc.2` > `rc.1`, `2.1.0` > `2.1.0-rc.2`) | it is newer: never an older release, and the release of its own version once that ships |
-| Nightly | the `nightly` release's build (its list's `tag` line) | it is another build |
+| Nightly | the `nightly` release's build (its list's `tag` line) | it is newer: a larger count (`nightly-2030-…` > `nightly-2029-…`) |
 
-Choosing another track installs that track's newest build, an older version too (the builder asks first). The game's
-own update check (`host/hos_update.c`) follows the track of the folder's version. The same rules are in
-`builder/HookshotBuilder/Updater.cs`, `builder/linux/linux_update.py` and `tests/test_update_tracks.py`. A release
+The order is decided within a track, never across:
+
+- Releases and release candidates are in semver order with each other, as above.
+- Nightlies are in the order of their count. A nightly with `-dirty` comes after the build of its own commit (a changed
+  checkout is not "updated" to the commit it was made from). Every `nightly-<count>` is newer than every name from
+  before (`v2.1.0-rc.3-248-gc544828f`), so an install named the old way takes the first new nightly; those old names are
+  not ordered among themselves.
+- **A nightly and a release or release candidate are not ordered.** A nightly's name has no version in it, so neither is
+  newer or older than the other, and a builder never offers one as an update for the other by itself: a nightly game
+  folder opened with a release's builder (or a release's folder with a nightly builder) keeps Play, and the builder
+  says the folder is on another update track. A folder whose version names no release (a hash, `dev`) is on no track
+  and is offered the builder's track's newest, as before.
+- Choosing another track in the menu (one other than the builder's own) installs that track's newest build, whatever
+  the order: the choice is the player's, not a comparison. The builder asks first when that build is older (between
+  releases and release candidates, where the order is known), and when it puts a nightly in place of a release or a
+  release in place of a nightly ("… is on another update track than …, install it in its place?"). A Linux builder
+  hands that answer to the builder it installs (`--allow-downgrade-from`), so it is asked once.
+
+The game's own update check (`host/hos_update.c`) follows the track of the folder's version: a nightly folder is offered
+the nightly's build only when it is newer. The same rules are in `builder/HookshotBuilder/Updater.cs`,
+`builder/linux/linux_update.py`, `builder/setup/setup.c` (which release holds a nightly's files) and
+`tests/test_update_tracks.py`, whose vectors (`TRACKS`, `ORDER`, `UNORDERED`, `OTHER_TRACK`, `SHOWN`) all of
+them are checked against (`Updater.cs` by `tests/test_update_tracks_cs.py`). A release
 candidate's and the nightly's `HookshotBuilder.exe` are built with `HOOKSHOT_SETUP_RELEASE`, so started with no `--tag`
 they install their own release (`builder/setup/setup.c`).
 
@@ -287,10 +327,10 @@ and released the same way as a release candidate, but release-please only follow
 | git tag | release-please (a release candidate), Promote (its version), or a tag pushed by hand; the source of truth |
 | `.release-please-manifest.json` | the release pull request, and the Release workflow's record job once a version is published |
 | `CHANGELOG.md` | the release pull request, and the record job |
-| `hookshot_log.txt` and the Insert menu | `nx2/version.py`: `HOOKSHOT_VERSION`, then `VERSION`/`version.txt`, then `git describe --tags --match "v[0-9]*"` |
+| `hookshot_log.txt` and the Insert menu | `nx2/version.py`: `HOOKSHOT_VERSION`, then `VERSION`/`version.txt`, then the release tag the checkout is exactly on, else `nightly-<count>-<commit>[-dirty]`. The log keeps the name; the Insert menu, the start-up screen, Discord and the update question show a nightly as "Nightly 2029 · c544828f" |
 | `hookshot_version.txt` in a build | the `VERSION` file written when the tools are packaged (`nx2/make_game.py`) |
-| AppImage file name | a release's tag (`HOOKSHOT_VERSION`), else `git describe --tags --match "v[0-9]*"` (`scripts/linux/appimage.sh`) |
-| `HookshotBuilder.exe` | the MSBuild `Version` passed at publish time (`dotnet publish -p:Version=<version>`, the Windows builder workflow); the `csproj`'s `0.1.0` is only the default for a local build |
+| AppImage file name | `HOOKSHOT_VERSION`: in CI a release's tag, else `scripts/nightly_name.sh`'s `nightly-<count>-<commit>`; built by hand, the release tag the checkout is exactly on, else the nightly's name (`scripts/linux/appimage.sh`) |
+| `HookshotBuilder.exe` | its `tools/version.txt`, the tag of its setup list (`scripts/make_setup_parts.py`), which is what the builder reads; the assembly's MSBuild `Version` is passed at publish time (`dotnet publish -p:Version=<version>`, the Windows builder workflow): a release's version, or `0.0.0-nightly.<count>` for a nightly (MSBuild takes only a NuGet version); the `csproj`'s `0.1.0` is only the default for a local build |
 
 `nx2/version.py` also appends a fingerprint of the source files, `(source 1a2b3c4d)`. It is not a version: it tells
 two builds of the same release apart, and it is the only identifier a build from a modified checkout has.

@@ -5,8 +5,9 @@ The game prints it as the first line of hookshot_log.txt and in the Insert menu,
     python -I nx2/version.py            prints it for this folder
 
 The release name comes from, in order: HOOKSHOT_VERSION; a VERSION file at the root (written when a release is packaged,
-since the builder's tools folder has no git history); `git describe --tags --always --dirty` in a checkout, matching
-only version tags (`v0.1.0`, not the branch-like tags from before the scheme). The
+since the builder's tools folder has no git history); in a checkout, its release tag when it is exactly on one (only
+version tags, `v0.1.0`, not the branch-like tags from before the scheme), else the nightly's form,
+`nightly-<commit count>-<commit>[-dirty]` (checkout_name). The
 fingerprint is a hash of the sources in this folder (host/, gpu/, nx2/), line endings aside: every build from the
 same release zip gives the same one, so even a build that says "unknown" can be traced to the zip it came from. (A
 checkout and a release's tools folder hold different sets of files, so their fingerprints differ.)
@@ -33,13 +34,35 @@ def release(root=ROOT):
             if name:
                 break
     if not name and os.path.exists(os.path.join(root, ".git")):
-        try:
-            r = subprocess.run(["git", "-C", root, "describe", "--tags", "--always", "--dirty", "--match", "v[0-9]*"],
-                               capture_output=True, text=True, timeout=20)
-            name = r.stdout.strip() if r.returncode == 0 else ""
-        except (OSError, subprocess.SubprocessError):
-            pass
+        name = checkout_name(root)
     return name or "unknown"
+
+
+def _git(root, *args):
+    try:
+        r = subprocess.run(["git", "-C", root, *args], capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
+def checkout_name(root=ROOT):
+    """A checkout's name: its release tag when HEAD is exactly on one (v2.1.0, v2.1.0-rc.3, -dirty with changes), else the
+    nightly's form, nightly-<commits in HEAD's history>-<HEAD's commit, 8 hex>[-dirty] (nightly-2029-c544828f), the name
+    CI gives every build that is not a release (scripts/nightly_name.sh). A shallow clone cannot count its history: its
+    commit alone, which names no track. "" when git does not answer."""
+    tag = _git(root, "describe", "--tags", "--exact-match", "--dirty", "--match", "v[0-9]*")
+    if tag and re.fullmatch(r"v\d+\.\d+\.\d+(-rc\.\d+)?(-dirty)?", tag):
+        return tag
+    sha = _git(root, "rev-parse", "HEAD")
+    if not sha or not re.fullmatch(r"[0-9a-f]{40,64}", sha):
+        return ""
+    status = _git(root, "status", "--porcelain", "--untracked-files=no")
+    dirty = "-dirty" if status else ""
+    if _git(root, "rev-parse", "--is-shallow-repository") != "false":
+        return sha[:8] + dirty
+    count = _git(root, "rev-list", "--count", "HEAD")
+    return "nightly-%s-%s%s" % (count, sha[:8], dirty) if count and count.isdigit() else sha[:8] + dirty
 
 
 def fingerprint(root=ROOT):

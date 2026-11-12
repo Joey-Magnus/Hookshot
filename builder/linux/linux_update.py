@@ -97,11 +97,36 @@ def parse_list(text, local=True):
     return Manifest(tag, parts)
 
 
+NIGHTLY_NAME = re.compile(r"nightly-(\d{1,9})-([0-9a-f]{8})(-dirty)?")
+OLD_NIGHTLY_NAME = re.compile(r"-\d+-g[0-9a-f]+(-dirty)?$")
+
+
+def nightly_key(version):
+    """A nightly's place in the nightly order, None when it is no nightly. nightly-<count>-<commit>[-dirty] (count: the
+    commits in its history, which only grows along main) by its count, -dirty after the build of its own commit; git
+    describe's v2.1.0-rc.1-3-g1a2b3c4, the nightly's name before, older than every one of those and not ordered among
+    themselves. host/hos_update.c nightly_rank, docs/versioning.md."""
+    v = (version or "").strip()
+    m = NIGHTLY_NAME.fullmatch(v)
+    if m:
+        return (1, int(m.group(1)), bool(m.group(3)))
+    return (0, 0, False) if OLD_NIGHTLY_NAME.search(v) else None
+
+
+def shown(version):
+    """A version as the builder shows it: nightly-2029-c544828f as "Nightly 2029 · c544828f" (-dirty kept), any other as it
+    is. Files and the log keep the version itself."""
+    m = NIGHTLY_NAME.fullmatch((version or "").strip())
+    return "Nightly %s · %s%s" % (m.group(1), m.group(2), m.group(3) or "") if m else version
+
+
 def release_key(tag):
-    """A version to compare: a release tag (v2.0.5, v2.1.0-rc.1) or git describe's v2.0.5-3-g1a2b3c4[-dirty] (a build from
-    the Actions tab or a checkout: after v2.0.5, before any later release). None for a build that names no release: a bare
-    commit (digits alone too: no v and no dot), dev, or no version at all. Prereleases in semver order: v2.1.0-rc.1 <
-    v2.1.0-rc.2 < v2.1.0."""
+    """A release's version to compare: a release tag (v2.0.5, v2.1.0-rc.1), or one with -dirty (a checkout of it with
+    changes: after it). None for a nightly (nightly_key: a nightly's name names no release) and for a build that names no
+    release: a bare commit (digits alone too: no v and no dot), dev, or no version at all. Prereleases in semver order:
+    v2.1.0-rc.1 < v2.1.0-rc.2 < v2.1.0."""
+    if nightly_key(tag) is not None:
+        return None
     m = re.match(r"^(?=v|\d+\.)v?(\d+(?:\.\d+)*)(?:-(?!\d+-g|dirty$)([0-9A-Za-z]+(?:\.[0-9A-Za-z]+)*))?(-\d+-g[0-9a-f]+)?(-dirty)?$",
                  (tag or "").strip())
     if not m:
@@ -112,11 +137,11 @@ def release_key(tag):
 
 
 def track_of(version):
-    """The track a build is on, from its version: "nightly" for git describe's v2.1.0-rc.1-3-g1a2b3c4 (the nightly is
-    named with --long, so even one built on a tagged commit says so), "rc" for a release candidate (v2.1.0-rc.1), else
-    "release" (a release, and anything that names no release)."""
+    """The track a build is on, from its version: "nightly" for nightly-2029-c544828f (CI names every build that is not a
+    release so, even one on a tagged commit) and for git describe's v2.1.0-rc.1-3-g1a2b3c4 that named it before, "rc" for
+    a release candidate (v2.1.0-rc.1), else "release" (a release, and anything that names no release)."""
     v = (version or "").strip()
-    if re.search(r"-\d+-g[0-9a-f]+(-dirty)?$", v):
+    if nightly_key(v) is not None:
         return "nightly"
     key = release_key(v)
     return "rc" if key and not key[1] else "release"
@@ -139,33 +164,54 @@ def newest_release(tags):
     return max(tags, key=release_key) if tags else None
 
 
+def newer(a, b):
+    """a newer than b: two releases or release candidates in semver order, or two nightlies in the nightly order
+    (nightly_key). A nightly and a release are not ordered (a nightly's name has no version in it): False both ways, as for
+    names that are no version."""
+    na, nb = nightly_key(a), nightly_key(b)
+    if na is not None or nb is not None:
+        return na is not None and nb is not None and na > nb
+    ra, rb = release_key(a), release_key(b)
+    return bool(ra and rb and ra > rb)
+
+
 def update_target(latest, tools, switch=False):
-    """The newest version this builder knows of: the latest release when it is newer than these tools, else the tools'
-    own. (issue 902) Any version other than the latest release was made to update before it could build, so a test
-    build from the Actions tab, newer than the release, was taken back to it. One made after an older release is still
-    offered the newer one. latest is its track's newest (latest_tag): a nightly is taken whenever it is another build,
-    and switch (a Track other than these tools' own was chosen) takes that track's newest even when it is older."""
+    """The newest version this builder knows of: its track's newest (latest, latest_tag) when it is newer than these tools,
+    else the tools' own. (issue 902) Any version other than the latest release was made to update before it could build,
+    so a test build from the Actions tab, newer than the release, was taken back to it. One made after an older release
+    is still offered the newer one, and a nightly the next nightly. A latest that is not ordered with these tools (a
+    nightly and a release) is not newer. switch (a Track other than these tools' own was chosen) takes that track's
+    newest, whatever the order: the choice is the player's."""
     if not latest or not tools:
         return latest or tools
-    if switch or track_of(latest) == "nightly":
-        return latest
-    have, out = release_key(tools), release_key(latest)
-    return latest if have and out and out > have else tools
+    return latest if switch or newer(latest, tools) else tools
 
 
 def older_version(target, have):
-    """Known version order only: arbitrary hashes and differing nightlies cannot establish commit ancestry."""
-    old, new = release_key(have), release_key(target)
-    return bool(old and new and new < old)
+    """Known version order only (newer): a hash, or a nightly against a release, is not older."""
+    return newer(have, target)
+
+
+def other_track(a, b):
+    """A nightly and a release or release candidate: one built over the other changes the folder's track, which only a
+    Track chosen in the menu does, and the player is asked first. False when either names no version (a hash, dev)."""
+    na, nb = nightly_key(a) is not None, nightly_key(b) is not None
+    return na != nb and (na or release_key(a) is not None) and (nb or release_key(b) is not None)
+
+
+def asks_first(target, have):
+    """Building a folder of have again as target is asked first: target is older, or on another track (other_track)."""
+    return older_version(target, have) or other_track(target, have)
 
 
 def choose_mode(game, tools, latest, source_picked, kept, switch=False):
     """What the builder's button does: an older game that still has its files is updated, a game at or beyond the
-    newest known release is played unless its track is explicitly switched, and an older builder updates
-    itself before a new build. latest None: GitHub did not answer, so the builder's own version is the newest known.
-    Newest is update_target's: a builder that is not an older release is not made to update."""
+    newest known release, or on another track than the target (a nightly and a release), is played unless its track is
+    explicitly switched, and an older builder updates itself before a new build. latest None: GitHub did not answer, so
+    the builder's own version is the newest known. Newest is update_target's: a builder that is not an older release is
+    not made to update."""
     target = update_target(latest, tools, switch)
-    if kept and game and target and game != target and not source_picked and (switch or not older_version(target, game)):
+    if kept and game and target and game != target and not source_picked and (switch or not asks_first(target, game)):
         return "update-game"
     if game and not source_picked:
         return "up-to-date"

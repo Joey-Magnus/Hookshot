@@ -223,6 +223,15 @@ static int send_activity(Ipc p, long long started) {
     char version[48], json[640], answer[ANSWER_CAP];
     snprintf(version, sizeof version, "%s", hos_version());
     version[strcspn(version, " +")] = 0;   /* ("v2.0.12 (source ...)": the release alone) */
+    /* (a nightly, nightly-2029-c544828f, as players see it: "Nightly 2029 · c544828f", gpu/vk/vk_progress.h release_text) */
+    const size_t digits = strncmp(version, "nightly-", 8) ? 0 : strspn(version + 8, "0123456789");
+    const char *sha = version + 8 + digits;
+    if (digits && digits <= 9 && *sha == '-' && strspn(sha + 1, "0123456789abcdef") == 8 &&
+        (!sha[9] || !strcmp(sha + 9, "-dirty"))) {
+        char shown[sizeof version];
+        snprintf(shown, sizeof shown, "Nightly %.*s \xC2\xB7 %s", (int)digits, version + 8, sha + 1);
+        memcpy(version, shown, sizeof version);
+    }
     snprintf(json, sizeof json,
              "{\"cmd\":\"SET_ACTIVITY\",\"nonce\":\"%u\",\"args\":{\"pid\":%lu,\"activity\":{\"details\":\"Ocarina of Time\","
              "\"state\":\"Hookshot %s\",\"timestamps\":{\"start\":%lld},\"assets\":{\"large_image\":\"%s\",\"large_text\":"

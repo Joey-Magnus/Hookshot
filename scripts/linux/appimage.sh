@@ -15,9 +15,10 @@ ROOT=$PWD
 B=$ROOT/build-linux
 DEPS=${DEPS:-$B/deps}
 APPDIR=$B/AppDir
-# (--long: a nightly built on a tagged commit is v2.1.0-rc.1-0-g1a2b3c4, so the updaters know it is the nightly:
-# builder/linux/linux_update.py track_of)
-VERSION=${HOOKSHOT_VERSION:-$(git describe --tags --long --always --match "v[0-9]*" 2>/dev/null || echo dev)}
+# (the version CI passes: a release's tag, else the nightly's nightly-<count>-<commit>, even on a tagged commit, so the
+# updaters know it is the nightly: builder/linux/linux_update.py track_of. Built by hand: the release tag the checkout is
+# exactly on, else the nightly's name, scripts/nightly_name.sh)
+VERSION=${HOOKSHOT_VERSION:-$(git describe --tags --exact-match --match "v[0-9]*" 2>/dev/null || scripts/nightly_name.sh 2>/dev/null || echo dev)}
 export EMSDK=$DEPS/emsdk RX_CPM=$DEPS/cpm
 PY=$DEPS/python/bin/python3
 

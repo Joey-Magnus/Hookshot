@@ -211,7 +211,7 @@ class Window:
             Cancelled=linux_update.Cancelled, update_target=lambda latest, tools, switch: latest, track_of=lambda tag: "release",
             running_root=lambda: "/tools", tools_tag=lambda root: tools, read_manifest=lambda root: None,
             startup_manifest=lambda root, get=None, tag=None: SimpleNamespace(tag=manifest_tag), install=install,
-            fetch_bytes=linux_update.fetch_bytes, game_version=lambda folder: (tools,), older_version=lambda new, old: False)
+            fetch_bytes=linux_update.fetch_bytes, game_version=lambda folder: (tools,), asks_first=lambda new, old: False)
         scope = {"os": SimpleNamespace(killpg=lambda pid, sig: self.killed.append(pid)), "signal": SimpleNamespace(SIGTERM=15),
                  "linux_update": update, "queue": queue,
                  "threading": SimpleNamespace(Thread=lambda target, daemon: SimpleNamespace(start=lambda: self.threads.append(target)))}

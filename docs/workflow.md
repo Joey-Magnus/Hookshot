@@ -90,7 +90,7 @@ problem with a log outranks an NVIDIA one of the same severity.
 6. **Review.** Answer every comment in the PR. Rebase onto `main` before asking for review again: a PR that does not
    merge cleanly waits.
 7. **Merge and release.** Release branches are merged back into `main` right after a release, so that `main`'s builds
-   carry the release's fixes and the right version string (`git describe` only sees tags on `main`'s history).
+   carry the release's fixes.
 8. **Verify.** Ask the reporter to retest on the release, then close the issue, or keep it open on the tracking issue
    with what is left.
 

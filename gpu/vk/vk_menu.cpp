@@ -2649,12 +2649,14 @@ void draw_options(ui::Ctx& c) {
         x += tw[i];
     }
     {   // (which build, at the banner's left, so a report can say it without opening the log; the release alone when the whole
-        // line would run into the tabs)
-        std::string ver = std::string("Hookshot ") + HOOKSHOT_VERSION;
+        // line would run into the tabs. A nightly as players see it, "Nightly 2029 · c544828f": vk_progress.h release_text)
+        const std::string name = HOOKSHOT_VERSION;
+        const size_t source = name.find(" (");
+        std::string ver = "Hookshot " + release_text(name.substr(0, source)) + (source != std::string::npos ? name.substr(source) : "");
         const float room = (c.w - total) * 0.5f - 60 * s - c.safe, px = 15 * s;
         const auto width = [&](float p) { return ui::size_of(c.f.body, p, ver.c_str()).x; };
         if (width(px) > room && ver.find(" (") != std::string::npos) ver.resize(ver.find(" ("));
-        // (still too long, as a source build's "v2.0.11-821-g7b81752-dirty" since the Audio tab: at Small and Medium smaller
+        // (still too long, as a source build's "nightly-1985-7b81752a-dirty (source ...)" since the Audio tab: at Small and Medium smaller
         // until it fits, on half-point steps, 10 points at the least; at Large, the size for a TV across the room, at its size
         // or not at all, as before)
         const float fit = ui::fit_px(px, opts.menu_size == 3 ? px : kVersionMinPt * s, 0.5f * s, room, width);
