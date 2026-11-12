@@ -193,6 +193,7 @@ static std::string ini_file;
 static std::string ini_path() { return ini_file; }
 static int parse_output(const char*) { return 0; }
 static std::string mic_want;
+static uint64_t auto_for = 0;   // (the Quality preset Auto (this PC)'s fingerprint, which save() writes)
 static std::string mic_key(const char* name) { return name; }
 static void mic_tell_host() {}
 static int rumble_step(int v) { return v; }

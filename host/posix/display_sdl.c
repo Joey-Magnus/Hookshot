@@ -126,7 +126,13 @@ static void drawable_size(void *w, int *width, int *height) {
 /* (SDL's display calls belong on this thread: the loop asks every second, the renderer reads what it found) */
 static volatile int refresh_now;
 static int refresh_mhz(void *w) { (void)w; return __atomic_load_n(&refresh_now, __ATOMIC_RELAXED); }
-static MkwVkWindow vk_window = {MKWVK_WINDOW_VERSION, create_surface, drawable_size, NULL, refresh_mhz};
+/* (the desktop's size in pixels, read on this thread when the window is made: the Quality preset Auto (this PC)) */
+static volatile int desktop_w, desktop_h;
+static void desktop_size(void *w, int *width, int *height) {
+    (void)w;
+    *width = __atomic_load_n(&desktop_w, __ATOMIC_RELAXED), *height = __atomic_load_n(&desktop_h, __ATOMIC_RELAXED);
+}
+static MkwVkWindow vk_window = {MKWVK_WINDOW_VERSION, create_surface, drawable_size, NULL, refresh_mhz, desktop_size};
 
 /* Esc let the captured mouse go just before it opened the Insert menu (Menu shortcut "Insert, F1 or Esc"):
    the capture that comes back when the menu closes. Spent by the next capture or menu */
@@ -243,7 +249,10 @@ int hos_display_init(void) {
         return -1;
     }
     int w, h;
-    if (hos_sdl_desktop_size(&w, &h)) hos_posix_window[1] = w, hos_posix_window[2] = h;
+    if (hos_sdl_desktop_size(&w, &h)) {
+        hos_posix_window[1] = w, hos_posix_window[2] = h;
+        __atomic_store_n(&desktop_w, w, __ATOMIC_RELAXED), __atomic_store_n(&desktop_h, h, __ATOMIC_RELAXED);
+    }
     sdl_ready = 1;
     return 1;
 }
