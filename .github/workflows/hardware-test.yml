@@ -6,8 +6,13 @@
 # run (the tester's runner, labels self-hosted, hookshot-hardware and <name>): no token and no checkout on the runner
 #   itself; the runner owner's sandbox program (HOOKSHOT_HW_SANDBOX) fetches that one commit, builds it with the dump
 #   on that PC, runs the scene with no network, and writes only results.txt and screenshots. The dump never leaves it.
+#   Before calling the sandbox it checks again that the pull request is open, labelled and at that commit, since the job
+#   may have waited in the queue for hours.
 # report (GitHub's runner): posts results.txt on the pull request as quoted text; it never runs anything from the run.
 # The test waits in GitHub's queue until a runner with that label is online, and is never a check a merge waits for.
+#
+# Fork-local pilot: the pull request, the label and the runner are all in the repository this runs in (a tester's fork
+# and a test pull request on it); see hardware-test-label.yml. Runners are Linux, and every step is Bash.
 name: Hardware test
 
 on:
@@ -50,7 +55,9 @@ jobs:
           PR: ${{ inputs.pr }}
           SHA: ${{ inputs.sha }}
           HARDWARE: ${{ inputs.hardware }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
+          [ "$GITHUB_REF" = "refs/heads/$DEFAULT_BRANCH" ] || { echo "::error::run this from $DEFAULT_BRANCH, not $GITHUB_REF: only the default branch's copy of this workflow is trusted"; exit 1; }
           [[ "$HARDWARE" =~ ^[a-z0-9][a-z0-9-]{0,31}$ ]] || { echo "::error::hardware: lowercase letters, digits and dashes only"; exit 1; }
           [[ "$SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::sha: the full 40-character commit"; exit 1; }
           # (HARDWARE is checked above to be [a-z0-9-] only, so it can stand in the jq expression)
@@ -64,15 +71,34 @@ jobs:
   run:
     name: Test on ${{ needs.check.outputs.hardware }}
     needs: check
-    runs-on: [self-hosted, hookshot-hardware, "${{ needs.check.outputs.hardware }}"]
+    runs-on: [self-hosted, linux, hookshot-hardware, "${{ needs.check.outputs.hardware }}"]
     timeout-minutes: 120
     permissions: {}
+    defaults:
+      run:
+        shell: bash
     steps:
+      - name: The commit is still the labelled head, after the queue
+        env:
+          PR: ${{ inputs.pr }}
+          SHA: ${{ inputs.sha }}
+          HARDWARE: ${{ needs.check.outputs.hardware }}
+        run: |
+          # (no token on this runner: the pull request is read through the public API; anything unexpected stops here)
+          pr_json=$(curl -fsS --max-time 30 -H 'Accept: application/vnd.github+json' "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/pulls/$PR") \
+            || { echo "::error::could not read #$PR to check it again"; exit 1; }
+          read -r state head labelled < <(jq -r --arg hw "$HARDWARE" \
+            '"\(.state) \(.head.sha) \([.labels[].name | select(startswith("hardware:")) | ltrimstr("hardware:") | ltrimstr(" ")] | any(. == $hw))"' \
+            <<< "$pr_json") || { echo "::error::could not read #$PR to check it again"; exit 1; }
+          [ "$state" = open ] || { echo "::error::pull request #$PR is $state now"; exit 1; }
+          [ "$head" = "$SHA" ] || { echo "::error::#$PR's head moved to $head while the test waited for a runner"; exit 1; }
+          [ "$labelled" = true ] || { echo "::error::the \"hardware: $HARDWARE\" label came off #$PR while the test waited for a runner"; exit 1; }
       - name: Run the commit in the runner's sandbox
         env:
           PR: ${{ inputs.pr }}
           SHA: ${{ inputs.sha }}
           OUT: ${{ runner.temp }}/hardware-test
+          HOOKSHOT_HW_HARDWARE: ${{ needs.check.outputs.hardware }}
         run: |
           if [ -z "${HOOKSHOT_HW_SANDBOX:-}" ] || [ ! -x "$HOOKSHOT_HW_SANDBOX" ]; then
             echo "::error::this runner has no sandbox (HOOKSHOT_HW_SANDBOX, docs/hardware-runners.md); a pull request's code does not run on it outside one"
@@ -119,12 +145,23 @@ jobs:
             echo "Hardware test on \`$HARDWARE\` for $SHA: **$OUTCOME** ([run]($run_url), $shots screenshots in its artifacts)."
             echo
             if [ -f results/results.txt ]; then
+              # The runner's text is untrusted: no fence of its own can end this one, and no @mention pings anyone.
+              # Escaping makes it longer (an @ gains 3 bytes), so the cap comes after it: 60,000 bytes leave the
+              # wrapper plenty of room under GitHub's 65,536-character comment limit. iconv drops a character the
+              # cut split in two.
+              # shellcheck disable=SC2016 # (the backticks are literal Markdown)
+              sed -e 's/````/` ` ` `/g' -e 's/@/@\xe2\x80\x8b/g' results/results.txt > escaped.txt
+              head -c 60000 escaped.txt | { iconv -c -f UTF-8 -t UTF-8 || true; } > quoted.txt
               echo "<details><summary>results.txt, as the runner wrote it</summary>"
               echo
               echo '````text'
-              # (the runner's text is untrusted: no fence of its own can end this one, and no @mention pings anyone)
-              head -c 60000 results/results.txt | sed -e 's/````/` ` ` `/g' -e 's/@/@\xe2\x80\x8b/g'
+              cat quoted.txt
+              [ -z "$(tail -c 1 quoted.txt)" ] || echo
               echo '````'
+              if [ "$(wc -c < escaped.txt)" -gt 60000 ]; then
+                echo
+                echo "(cut at 60,000 bytes; the whole file is in the run's artifacts)"
+              fi
               echo "</details>"
             else
               echo "The runner wrote no results.txt."

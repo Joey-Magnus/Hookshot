@@ -4,6 +4,13 @@
 # from the default branch's hardware-test.yml (workflow_dispatch), never from the pull request's copy of it: that is
 # what makes pull_request_target safe for pull requests from forks. Only people with triage access can add labels.
 # No game data is involved.
+#
+# For now this is a fork-local pilot: the label, the pull request and the runner are all on one tester's fork (a test
+# pull request opened on the fork itself). The dispatch, the check and the report use the token of the repository the
+# workflow runs in, so a label on NotRexed/Hookshot cannot start a run on a fork's runner; testing an upstream pull
+# request automatically would need a relay with its own authorization, which this does not have. Registering runners
+# on NotRexed/Hookshot is not the fix (docs/hardware-runners.md says why). A repository only dispatches for the
+# hardware names listed in its HOOKSHOT_HW_RUNNERS variable; without it a label only leaves a notice.
 name: Hardware test gate
 
 on:
@@ -30,12 +37,17 @@ jobs:
           LABEL: ${{ github.event.label.name }}
           PR: ${{ github.event.pull_request.number }}
           SHA: ${{ github.event.pull_request.head.sha }}
+          RUNNERS: ${{ vars.HOOKSHOT_HW_RUNNERS }}
         run: |
           hardware="${LABEL#hardware:}"
           hardware="${hardware# }"
           if ! [[ "$hardware" =~ ^[a-z0-9][a-z0-9-]{0,31}$ ]]; then
             echo "::error::label \"$LABEL\": the hardware name after \"hardware: \" must be lowercase letters, digits and dashes"
             exit 1
+          fi
+          if [[ " $RUNNERS " != *" $hardware "* ]]; then
+            echo "::notice::$GH_REPO has no \"$hardware\" runner (its HOOKSHOT_HW_RUNNERS variable does not list it), so nothing was started. The pilot runs on a tester's fork, with a test pull request on that fork (docs/hardware-runners.md)."
+            exit 0
           fi
           gh workflow run hardware-test.yml --ref "$BRANCH" -f pr="$PR" -f sha="$SHA" -f hardware="$hardware"
           echo "dispatched: PR #$PR at $SHA on \"$hardware\""
@@ -48,16 +60,41 @@ jobs:
     permissions:
       pull-requests: write
     steps:
-      - name: Remove the hardware labels
+      - name: Remove the hardware labels put on before this push
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
           SHA: ${{ github.event.pull_request.head.sha }}
+          PUSHED_AT: ${{ github.event.pull_request.updated_at }}
         run: |
-          labels=$(gh pr view "$PR" --json labels --jq '.labels[].name | select(startswith("hardware:"))')
+          # (this job can start long after its push: it must not take off a label a maintainer put on since)
+          view=$(gh pr view "$PR" --json headRefOid,labels --jq '.headRefOid, (.labels[].name | select(startswith("hardware:")))')
+          head=$(sed -n 1p <<< "$view")
+          labels=$(sed 1d <<< "$view")
+          if [ "$head" != "$SHA" ]; then
+            echo "::notice::#$PR's head is now $head, not $SHA: the newer push's own run takes the labels off"
+            exit 0
+          fi
           [ -n "$labels" ] || exit 0
+          # When each label was last put on. If that cannot be read, every label comes off (the safe side).
+          events=$(gh api --paginate "repos/$GH_REPO/issues/$PR/events" \
+            --jq '.[] | select(.event == "labeled") | "\(.created_at) \(.label.name)"') || events=""
+          removed=0
           while IFS= read -r label; do
+            latest=""
+            while IFS= read -r event; do
+              if [ "${event#* }" = "$label" ] && [[ "${event%% *}" > "$latest" ]]; then
+                latest="${event%% *}"
+              fi
+            done <<< "$events"
+            if [[ "$latest" > "$PUSHED_AT" ]]; then
+              echo "::notice::\"$label\" was put on at $latest, after the push at $PUSHED_AT: it stays"
+              continue
+            fi
             gh pr edit "$PR" --remove-label "$label"
+            removed=$((removed + 1))
           done <<< "$labels"
-          gh pr comment "$PR" --body "New commits, so the hardware test labels came off. A maintainer puts them back after looking at the new commits; the test then runs on that head ($SHA or later)."
+          if [ "$removed" -gt 0 ]; then
+            gh pr comment "$PR" --body "New commits, so the hardware test labels came off. A maintainer puts them back after looking at the new commits; the test then runs on that head ($SHA or later)."
+          fi
