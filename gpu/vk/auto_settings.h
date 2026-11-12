@@ -18,7 +18,7 @@ struct Hardware {
     bool integrated = false;
     bool handheld = false;      // (a Steam Deck or another handheld PC: its own small screen and a shared memory budget)
     bool mesh_native = true;    // (the card has mesh shaders, by its feature query; false: the fallback, the mesh programs as compute)
-    bool mesh_as_compute = false;   // (this run runs them as compute all the same: the Mesh shaders row's Compute, or Linux AMD's
+    bool mesh_as_compute = false;   // (this run runs them as compute all the same: RX_VK_MESH_SHADERS=compute, or Linux AMD's
                                     // Automatic, #2245. The card's tier is its own: not for the choice nor the fingerprint)
     bool rtx = false;           // (an NVIDIA RTX card: DLSS's tensor cores)
     bool rdna4 = false;         // (an AMD RDNA 4 card, RX 9000: FSR 4)
