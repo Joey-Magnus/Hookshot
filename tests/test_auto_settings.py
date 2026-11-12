@@ -24,7 +24,10 @@ def check_source():
     menu = (ROOT / "gpu/vk/vk_menu.cpp").read_text(encoding="utf-8")
     need("vk_menu.cpp", menu, ['{TAB_GRAPHICS, "Quality preset", &opts.preset, 0, 6, 1, tx_preset,', '"Auto (this PC)"',
                                "constexpr int kAutoPreset = 6;", "if (first) opts.preset = kAutoPreset;",
-                               "::auto_settings::choose(hw)", "if (fp == auto_for)", 'fprintf(f, "auto_for=%016llx\\n"'])
+                               "::auto_settings::choose(hw)", "if (fp == auto_for)", 'fprintf(f, "auto_for=%016llx\\n"',
+                               # (save() keeps the lines it does not write: auto_for must be one it writes, or the old line,
+                               # kept after the new one, wins at the next start and Auto chooses again every time)
+                               '|| key == "memory_budget" || key == "auto_for";'])
     main = (ROOT / "gpu/vk/vk_main.cpp").read_text(encoding="utf-8")
     need("vk_main.cpp", main, ["auto_profile();   // (the Quality preset Auto (this PC)", "menu_auto_for_gpu(p, hw);"])
     api = (ROOT / "gpu/vk/vk_api.h").read_text(encoding="utf-8")
