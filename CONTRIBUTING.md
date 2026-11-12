@@ -87,6 +87,9 @@ the type or scope (`feat(builder)!: ...`) marks a breaking change. How each type
 - Match the file you edit: there is no formatter. Do not reformat code you are not changing.
 - New switches use `RX_` in the renderer and `HOS_` in the runtime. They are off unless set, and cost nothing while off.
   Add them to [switches](docs/dev/switches.md).
+- A new row on the menu's Graphics, Audio, Gameplay or Controls tab, or its Motion or Controls page, needs a line in
+  [settings](docs/user/settings.md), in the menu's order, with its choices and default:
+  `tests/test_settings_menu_rows.py` fails without it.
 - The GPU replay never reads live guest memory, honours waits per queue, and keeps texture and sampler registrations
   in submission order. The [architecture](docs/dev/architecture.md#gpu-replay-rules) page has these rules.
 - Do not edit `third_party/`. Add a new folder with its provenance note instead.

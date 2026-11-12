@@ -146,7 +146,7 @@ Screen, HDR, Detail, and GPU and memory (the rows to change when something is wr
 |---|---|---|---|
 | GPU device | Auto, or each graphics card by name | Auto | Which graphics card runs the game, for PCs with more than one. Auto picks the best dedicated card. Applies after a restart |
 | VRAM budget | Auto, 3.6 GB, 4.8 GB, 6 GB, 7.5 GB, 9 GB, 11 GB | Auto | How much video memory the game's textures may use. Lower it if the game stutters after you've played a while. A preset sets it; the Minimum preset uses 2.2 GB |
-| Mesh shaders | Automatic, Native, Compute | Automatic | How the card draws much of the scenery. **Automatic** uses the card's mesh shaders where it has them. **Compute** works on every card and is usually a little slower; try it if objects are missing or the game crashes. Applies after a restart |
+| Mesh shaders | Automatic, Native, Compute | Automatic | How the card draws much of the scenery. **Automatic** uses the card's mesh shaders where it has them, and the compute path where it hasn't. **Native** uses the card's own for every draw (a card without them still gets the compute path). **Compute** works on every card and is usually a little slower; try it if objects are missing or the game crashes. Applies after a restart |
 
 **Render resolution choices.** The steps depend on the Upscaler. Each shows the size it draws at.
 
@@ -186,7 +186,7 @@ FSR 4 its Native AA. It's the sharpest and the heaviest choice. At 100%, FSR 3.1
 | Microphone | Off, Default, or each microphone by name | Default | What the game hears when you use its microphone option (playing an instrument or humming). **Default** is your system's recording device. On Windows, desktop apps must be allowed to use the microphone (Settings, Privacy & security). An unplugged microphone stays chosen, and Default stands in until it's back |
 | Game language | The game's 16 languages, each by its own name | The one you built with | The language of the game's own text. It's saved in `language.txt` in the game folder when you leave the row. Applies after a restart |
 | Menu language | Auto, English, Português (Brasil), Español (Latinoamérica), Español (España), Français, Deutsch, Italiano, Nederlands, Polski, Русский, 日本語, 한국어, 简体中文, 繁體中文 | Auto | The language of this menu. **Auto** follows the language the game runs in. The translations are machine-made, so corrections from speakers are welcome; place and item names stay in English for now |
-| Discord status | Off, On | On | Shows "Playing Hookshot" and your play time in your Discord status, while Discord runs on this PC |
+| Discord status | Off, On | On | Shows "Playing Hookshot" and your play time in your Discord status, while Discord runs on this PC. It does nothing unless Discord is running; with the row Off nothing is sent to it |
 | Skip opening | Off, On | Off | Skips a new game's opening: the story movie and Navi waking Link. The title screen, later cutscenes and the meeting with the Great Deku Tree still play |
 | Bug report | | | Saves what a bug report needs into a new folder in `bug-reports` in the game folder. Nothing is sent. See [collecting what we need for a bug report](troubleshooting.md#collecting-what-we-need-for-a-bug-report) |
 | Restart | | | Starts the game again. Press Enter or A twice to confirm; Esc or B cancels. Save first |

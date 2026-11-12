@@ -35,4 +35,5 @@ one table is used, the one in the mod that sorts last. So if you combine two mod
 table that covers both, in the mod that sorts last.
 
 Hookshot adds its own button-prompt entries to whichever table is used, so your controller's button icons still show
-in the game's text.
+in the game's text. If a mod includes tables for several game versions, the prompts use the one named as in the game's
+own files, not the first one found in the mod; the other versions' tables don't change the prompts.
