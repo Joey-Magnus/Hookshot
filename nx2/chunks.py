@@ -338,9 +338,12 @@ def write(L, gen_dir, img_dir, rechunk=False, counters=(), jobs=None, took=None)
     # code_*.c: split_hot.py makes this lift's after it. A lift with no code_hot.c (no hot list, A64_HOT_CHUNK unset, or none of the
     # listed functions in it): split_hot.py had renamed the old one code_hot.c.whole and left code_hot_*.c, which build.py compiled
     # again, the earlier lift's hot functions, each defined in a chunk too, linked twice. A lift with one: the old pieces, patched
-    # already, and the new whole file each held the output-size places, and nx2/oot_patches.py's count of them failed the lift)
+    # already, and the new whole file each held the output-size places, and nx2/oot_patches.py's count of them failed the lift).
+    # An earlier lift's split parts (code_NNN_M.c) go too, so split_big's _cut_already sees only parts this lift made: a saved
+    # boundary moved to where that lift cut a chunk leaves the new chunk the same as its first part, and its old parts, whose
+    # functions are now the next chunk's, were taken as this lift's and linked twice
     for f in os.listdir(gen_dir):
-        if f == "code_hot.c.whole" or HOT_PIECE.fullmatch(f):
+        if f == "code_hot.c.whole" or HOT_PIECE.fullmatch(f) or PART.fullmatch(f):
             os.remove(os.path.join(gen_dir, f))
     files += split_big(gen_dir, files)
     took("big chunks split")
@@ -384,6 +387,62 @@ def write_costs(gen_dir, costs):
         f.write("".join("%s %d\n" % kv for kv in sorted(known.items())))
 
 
+def _cut(text, budget):
+    """A chunk's text cut at function starts into parts of about equal cost when its cost is past the budget:
+    ([(part's text, its cost)], the total cost) with the chunk's own (first) part first, or (None, its cost) when it stays whole"""
+    marks = [h.start() for h in HEAD.finditer(text)]
+    ends = marks[1:] + [len(text)]
+    cost = [fn_cost(b - a) for a, b in zip(marks, ends)]
+    total = sum(cost)
+    if total <= budget * 3 // 2 or len(marks) < 2:
+        return None, marks[0] + total if marks else len(text)
+    parts = -(-total // budget)
+    cuts, run, k = [0], 0, 1   # (indexes into marks where a part starts)
+    for i, c in enumerate(cost):
+        if i and run >= total * k // parts:
+            cuts.append(i)
+            k = run * parts // total + 1   # (past a giant function: the next share, not a sliver after it)
+        run += c
+    if len(cuts) < 2:   # (no cut: a giant function last, past every share)
+        return None, marks[0] + total
+    bounds = [marks[i] for i in cuts] + [len(text)]
+    preamble = text[:marks[0]]
+    pieces = []
+    for j in range(len(cuts)):
+        piece = text[:bounds[1]] if j == 0 else preamble + text[bounds[j]:bounds[j + 1]]
+        pieces.append((piece, len(preamble) + sum(cost[cuts[j]:cuts[j + 1] if j + 1 < len(cuts) else len(cost)])))
+    return pieces, total
+
+
+def _line(path, text, total, n):
+    return "chunks: %s (%d MB, cost %d MB) in %d parts" % (os.path.basename(path), len(text) >> 20, total >> 20, n)
+
+
+def _cut_already(gen_dir, path, nnn, text, budget):
+    """(_split_one, a chunk under the budget) the chunk when it is the first part of a cut this lift made already: a worker that
+    finished the cut and whose result was lost when another worker stopped (the pool breaks, _each runs the chunk again here).
+    The chunk and its parts on disk joined and cut again must give those same files, so an earlier lift's parts beside a
+    chunk that is small now are not taken: (the parts, {file: cost}, the line to print), or None"""
+    marks = [h.start() for h in HEAD.finditer(text)]
+    if not marks:
+        return None
+    preamble = text[:marks[0]]
+    files, texts = [], []
+    while os.path.exists(os.path.join(gen_dir, "code_%s_%d.c" % (nnn, len(files) + 1))):
+        files.append(os.path.join(gen_dir, "code_%s_%d.c" % (nnn, len(files) + 1)))
+        with open(files[-1], encoding="utf-8", newline="") as f:
+            texts.append(f.read())
+        if not texts[-1].startswith(preamble):
+            return None
+    if not files:
+        return None
+    whole = text + "".join(t[len(preamble):] for t in texts)
+    pieces, total = _cut(whole, budget)
+    if pieces is None or [p for p, _ in pieces] != [text] + texts:
+        return None
+    return files, {os.path.basename(f): c for f, (_, c) in zip([path] + files, pieces)}, _line(path, whole, total, len(pieces))
+
+
 def _split_one(job):
     """(split_big, one chunk, in a process of its own where there are several) the chunk cut into parts when its cost is past the
     budget: (the parts made besides the chunk itself, {file: cost}, the line to print or None)"""
@@ -393,30 +452,19 @@ def _split_one(job):
         return [], {}, None
     with open(path, encoding="utf-8", newline="") as f:
         text = f.read()
-    marks = [h.start() for h in HEAD.finditer(text)]
-    ends = marks[1:] + [len(text)]
-    cost = [fn_cost(b - a) for a, b in zip(marks, ends)]
-    total = sum(cost)
-    if total <= budget * 3 // 2 or len(marks) < 2:
-        return [], {os.path.basename(path): marks[0] + total if marks else len(text)}, None
+    pieces, total = _cut(text, budget)
+    if pieces is None:
+        return _cut_already(gen_dir, path, m.group(1), text, budget) or ([], {os.path.basename(path): total}, None)
     made, costs = [], {}
-    parts = -(-total // budget)
-    cuts, run, k = [0], 0, 1   # (indexes into marks where a part starts)
-    for i, c in enumerate(cost):
-        if i and run >= total * k // parts:
-            cuts.append(i)
-            k = run * parts // total + 1   # (past a giant function: the next share, not a sliver after it)
-        run += c
-    bounds = [marks[i] for i in cuts] + [len(text)]
-    preamble = text[:marks[0]]
-    for j in range(len(cuts)):
+    # (the chunk itself last: a worker stopped part way leaves it whole, so the run again in the lift's process cuts it again,
+    # where a chunk already cut to its first part made no parts and split_big then removed the ones written)
+    for j in reversed(range(len(pieces))):
         out = path if j == 0 else os.path.join(gen_dir, "code_%s_%d.c" % (m.group(1), j))
-        piece = text[:bounds[1]] if j == 0 else preamble + text[bounds[j]:bounds[j + 1]]
-        whole_write.write_whole(out, piece)
-        costs[os.path.basename(out)] = len(preamble) + sum(cost[cuts[j]:cuts[j + 1] if j + 1 < len(cuts) else len(cost)])
+        whole_write.write_whole(out, pieces[j][0])
+        costs[os.path.basename(out)] = pieces[j][1]
         if j:
-            made.append(out)
-    return made, costs, "chunks: %s (%d MB, cost %d MB) in %d parts" % (os.path.basename(path), len(text) >> 20, total >> 20, len(cuts))
+            made.insert(0, out)
+    return made, costs, _line(path, text, total, len(pieces))
 
 
 def split_big(gen_dir, files, budget=None, jobs=None):

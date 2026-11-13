@@ -53,6 +53,7 @@ NX2_RT = os.path.join(kit.HERE, "rt")
 HOST = os.path.join(kit.HERE, "..", "host")
 OPUS = os.path.join(kit.HERE, "..", "third_party", "opus")
 ZSTD = os.path.normpath(os.path.join(kit.HERE, "..", "third_party", "zstd", "lib"))
+ZSTD_HOST = ("prompts.c", "hos_zstd.c")   # (the host files that use it: a mod's size table; the game's stream decode)
 OBJ_CACHE = os.path.join(kit.WORK, "objcache")
 # (hookshot) work/hot_order.txt: the functions that run, hottest first (sampled), packed together by the linker; RX_NO_ORDER=1: off
 PGO = os.environ.get("RX_PGO", "")
@@ -148,7 +149,7 @@ def HOT_ORDER():
 
 
 HOST_LIBS = ["-lpthread", "-ldl", "-lm"] if LINUX else \
-    ["-lwinhttp", "-luser32", "-lwinmm", "-ladvapi32", "-lole32", "-lshell32", "-lgdi32", "-ldbghelp"]
+    ["-luser32", "-lwinmm", "-ladvapi32", "-lole32", "-lshell32", "-lgdi32", "-ldbghelp"]
 GPU = os.path.join(kit.HERE, "..", "gpu")
 # FFmpeg (libavcodec's VP8/VP9 decoders, swscale) for nn::codec's video decoders (host/nn_video.c): the static build
 # in the Eglantine clone's package cache
@@ -251,26 +252,26 @@ def zstd_jobs(cc, flags, obj_dir, prefix):
                       "decompress/zstd_decompress.c", "decompress/zstd_decompress_block.c")]
 
 
-def cpm_dirs():
+def cpm_dirs(work=None):
     """CPM packages: RX_CPM, packaged tools/cpm, then legacy project caches.
     The packages provide Vulkan and SPIR-V headers, VMA and FFmpeg."""
     eden_ns2 = os.path.dirname(kit.ROOT)
     return [d for d in (os.environ.get("RX_CPM"), os.path.join(kit.ROOT, "cpm"),
-                        os.path.join(kit.WORK, "eg", ".cache", "cpm"),
+                        os.path.join(work if work is not None else kit.WORK, "eg", ".cache", "cpm"),
                         os.path.join(eden_ns2, "mkw-recomp", "work", "eg", ".cache", "cpm"),
                         os.path.join(eden_ns2, "Eglantine", ".cache", "cpm")) if d and os.path.isdir(d)]
 
 
-def cpm_package(name):
+def cpm_package(name, work=None):
     """The newest version of a package in the first CPM cache that has it (cpm_dirs), or None"""
-    for root in cpm_dirs():
+    for root in cpm_dirs(work):
         d = os.path.join(root, name)
         if os.path.isdir(d) and os.listdir(d):
             return os.path.join(d, sorted(os.listdir(d))[-1])
     return None
 
 
-def header_package(cpm_name, probe, env=None):
+def header_package(cpm_name, probe, env=None, work=None):
     """A package root with include/<probe>: CPM first, then env (package root or its include/ folder),
     then common system prefixes (/usr/local, /usr). Distro vulkan-headers / spirv-headers install
     under /usr/include; this is what makes a source build find them without a CPM tree."""
@@ -279,7 +280,7 @@ def header_package(cpm_name, probe, env=None):
     def ok(root):
         return bool(root) and os.path.isfile(os.path.join(root, "include", *parts))
 
-    pkg = cpm_package(cpm_name)
+    pkg = cpm_package(cpm_name, work)
     if ok(pkg):
         return pkg
     if env:
@@ -296,6 +297,20 @@ def header_package(cpm_name, probe, env=None):
         if ok(prefix):
             return prefix
     return None
+
+
+VK_HEADERS = (("Vulkan", "vulkanheaders", "vulkan/vulkan.h", "HOOKSHOT_VULKAN_HEADERS"),
+              ("SPIR-V", "spirv-headers", "spirv/unified1/spirv.h", "HOOKSHOT_SPIRV_HEADERS"),
+              ("VMA", "vulkanmemoryallocator", "vk_mem_alloc.h", "HOOKSHOT_VMA_HEADERS"))
+
+
+def vulkan_headers(work=None):
+    return [header_package(package, probe, env, work) for _, package, probe, env in VK_HEADERS]
+
+
+def prebuilt_renderer():
+    # The AppImage's renderer has no NGX: an SDK build compiles its own instead.
+    return "" if NGX_SDK else os.environ.get("HOOKSHOT_VK_PREBUILT", "")
 
 
 def cache_put(obj, key):
@@ -532,20 +547,38 @@ def dav1d_windows():
         os.path.exists(os.path.join(d, "include", "dav1d", "dav1d.h")) else None
 
 
-def ffmpeg_linux():
+def ffmpeg_linux(missing=None):
     """(linux) FFmpeg's compile and link flags: HOOKSHOT_FFMPEG=<prefix> with static libraries (the AppImage's, with
-    dav1d for OoT's AV1 movies), else the system's through pkg-config; None without either"""
+    dav1d for OoT's AV1 movies), else the system's through pkg-config; None without either.
+    missing, when supplied, collects the prerequisites absent from the selected route."""
     pre = os.environ.get("HOOKSHOT_FFMPEG")
     if pre and os.path.exists(os.path.join(pre, "lib", "libavcodec.a")):
         libs = [os.path.join(pre, "lib", "lib%s.a" % l) for l in FFMPEG_LIBS]
+        if missing is not None:
+            for path in libs + [os.path.join(pre, "include", "lib" + l, l + ".h") for l in FFMPEG_LIBS]:
+                if not os.path.isfile(path):
+                    missing.append("FFmpeg: %s (HOOKSHOT_FFMPEG's selected static prefix)" % path)
         libs += [os.path.join(pre, "lib", "libdav1d.a")] if os.path.exists(os.path.join(pre, "lib", "libdav1d.a")) else []
         return ["-I" + os.path.join(pre, "include")], libs + ["-lm", "-lpthread"]
+    names = ["lib" + l for l in FFMPEG_LIBS]
     try:
-        names = ["lib" + l for l in FFMPEG_LIBS]
         cflags = subprocess.run(["pkg-config", "--cflags"] + names, capture_output=True, text=True, check=True).stdout.split()
         libs = subprocess.run(["pkg-config", "--libs"] + names, capture_output=True, text=True, check=True).stdout.split()
         return cflags, libs
-    except (OSError, subprocess.CalledProcessError):
+    except (OSError, subprocess.CalledProcessError) as e:
+        if missing is not None:
+            absent = []
+            for name in names:
+                try:
+                    r = subprocess.run(["pkg-config", "--exists", name], capture_output=True)
+                    if r.returncode:
+                        absent.append(name)
+                except OSError:
+                    absent = ["pkg-config", *names]
+                    break
+            missing.append("FFmpeg: %s (HOOKSHOT_FFMPEG with lib/libavcodec.a first, else pkg-config --cflags/--libs "
+                           "for %s; install the development libraries or set HOOKSHOT_FFMPEG). %s" %
+                           (", ".join(absent or names), " ".join(names), str(e)))
         return None
 
 
@@ -1071,15 +1104,15 @@ def main():
     if dav1d:
         host_deps += open(os.path.join(dav1d, "include", "dav1d", "version.h"), "rb").read()
         print("AV1 movies: dav1d (%s)" % dav1d, flush=True)
-    zstd_api = b"".join(open(os.path.join(ZSTD, f), "rb").read() for f in sorted(os.listdir(ZSTD)) if f.endswith(".h"))   # (prompts.c's)
+    zstd_api = b"".join(open(os.path.join(ZSTD, f), "rb").read() for f in sorted(os.listdir(ZSTD)) if f.endswith(".h"))   # (ZSTD_HOST's)
     jobs += [(cc, s, os.path.join(obj_dir, "host_" + os.path.basename(s)[:-2] + ".o"),
               host_fl + ["-I" + os.path.join(OPUS, "include")] +
               (["-I" + os.path.join(FFMPEG, "include")] if FFMPEG else []) +
               (FFMPEG_LX[0] if LINUX and FFMPEG_LX else []) +
               ([stamp_def] if os.path.basename(s) == "hos_main.c" else []) +
-              (["-I" + ZSTD] if os.path.basename(s) == "prompts.c" else []) +
+              (["-I" + ZSTD] if os.path.basename(s) in ZSTD_HOST else []) +
               (dav1d_fl if os.path.basename(s) in ("nn_video.c", "dav1d_av1.c") else []),
-              host_deps + (zstd_api if os.path.basename(s) == "prompts.c" else b"")) for s in host_srcs]
+              host_deps + (zstd_api if os.path.basename(s) in ZSTD_HOST else b"")) for s in host_srcs]
     # libopus 1.5.2 (third_party/opus, from TOTKPort): nn::codec's hardware Opus decoder (host/nn_codec.c)
     # (hookshot: built for the same CPU target as the rest (CPU), so its float code can be vectorized where the target has
     # AVX2: the vendored copy has no x86 intrinsics files of its own)
@@ -1089,7 +1122,8 @@ def main():
         for rel in open(os.path.join(OPUS, "sources.txt")).read().split():
             jobs.append((cc, os.path.join(OPUS, rel), os.path.join(obj_dir, "opus_" + rel.replace("/", "_")[:-2] + ".o"),
                          oflags, b"opus-1.5.2"))
-    # zstd's decoder (as in the Vulkan back end): host/prompts.c reads a mod's resource size table to merge the prompts' into it
+    # zstd's decoder (as in the Vulkan back end): host/prompts.c reads a mod's resource size table to merge the prompts' into it,
+    # host/hos_zstd.c decodes the game's streams with it (HOS_NATIVE_ZSTD)
     if host_srcs:
         jobs += zstd_jobs(cc, target() + CPU + ["-O2", "-g0", "-DNDEBUG", "-Wno-everything", "-DZSTD_DISABLE_ASM",
                                                 "-DZSTD_LEGACY_SUPPORT=0", "-DZSTD_MULTITHREAD=0"], obj_dir, "zstd_")
@@ -1109,11 +1143,8 @@ def main():
             jobs.append((cxx, src, os.path.join(obj_dir, "gpu_" + name + ".o"), gflags, gdeps))
     # the Vulkan back end, a DLL of its own (RX_BACKEND=vulkan): CPM cache, HOOKSHOT_*_HEADERS, or system includes
     vk_jobs = []
-    vk_headers = header_package("vulkanheaders", "vulkan/vulkan.h", "HOOKSHOT_VULKAN_HEADERS")
-    spirv_headers = header_package("spirv-headers", "spirv/unified1/spirv.h", "HOOKSHOT_SPIRV_HEADERS")
-    vma_headers = header_package("vulkanmemoryallocator", "vk_mem_alloc.h", "HOOKSHOT_VMA_HEADERS")
-    # (the AppImage's prebuilt hookshot_vk.so is built without NVIDIA's SDK: a build with HOOKSHOT_NGX_SDK compiles its own)
-    vk_prebuilt = "" if NGX_SDK else os.environ.get("HOOKSHOT_VK_PREBUILT", "")
+    vk_headers, spirv_headers, vma_headers = vulkan_headers()
+    vk_prebuilt = prebuilt_renderer()
     build_vk = a.standalone and not vk_prebuilt and vk_headers and spirv_headers and vma_headers
     if a.standalone and vk_prebuilt:
         print("the Vulkan back end: %s, as built" % vk_prebuilt)
